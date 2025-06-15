@@ -1,9 +1,17 @@
+import { fuzzySearch } from '../utils/fuzzySearch';
+
 export interface Command {
   id: string;
   title: string;
   description?: string;
   keywords?: string[];
   handler: () => Promise<void> | void;
+}
+
+export interface SearchResult {
+  command: Command;
+  score: number;
+  matches: number[];
 }
 
 export class CommandRegistry {
@@ -28,17 +36,39 @@ export class CommandRegistry {
     return Array.from(this.commands.values());
   }
 
-  search(query: string): Command[] {
-    const normalizedQuery = query.toLowerCase();
-    return this.getAll().filter(command => {
-      const titleMatch = command.title.toLowerCase().includes(normalizedQuery);
-      const descriptionMatch = command.description?.toLowerCase().includes(normalizedQuery) || false;
-      const keywordMatch = command.keywords?.some(keyword => 
-        keyword.toLowerCase().includes(normalizedQuery)
-      ) || false;
+  search(query: string): SearchResult[] {
+    const commands = this.getAll();
+    
+    // If no query, return all commands with score 0
+    if (!query.trim()) {
+      return commands.map(command => ({
+        command,
+        score: 0,
+        matches: []
+      }));
+    }
+
+    // Use fuzzy search
+    const results = fuzzySearch(query, commands, (command) => {
+      const searchableStrings = [command.title];
       
-      return titleMatch || descriptionMatch || keywordMatch;
+      if (command.description) {
+        searchableStrings.push(command.description);
+      }
+      
+      if (command.keywords) {
+        searchableStrings.push(...command.keywords);
+      }
+      
+      return searchableStrings;
     });
+
+    // Map results to SearchResult format
+    return results.map(result => ({
+      command: result.item,
+      score: result.score,
+      matches: result.matches
+    }));
   }
 
   async execute(commandId: string): Promise<void> {

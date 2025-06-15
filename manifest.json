@@ -23,6 +23,7 @@
     "messagesMove",
     "messagesTags",
     "accountsRead",
+    "accountsFolders",
     "addressBooks"
   ],
   "commands": {

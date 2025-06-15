@@ -74,6 +74,14 @@ body {
   color: #999999;
 }
 
+.command-title .match {
+  background-color: #ffeb3b;
+  color: #333333;
+  font-weight: 600;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
 @media (prefers-color-scheme: dark) {
   body {
     background: #1e1e1e;
@@ -109,5 +117,10 @@ body {
 
   .no-results {
     color: #666666;
+  }
+
+  .command-title .match {
+    background-color: #4a4a00;
+    color: #ffeb3b;
   }
 }

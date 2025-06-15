@@ -6,11 +6,16 @@ interface Command {
   description?: string;
 }
 
+interface SearchResult {
+  command: Command;
+  score: number;
+  matches: number[];
+}
+
 class PopupUI {
   private searchInput: HTMLInputElement;
   private commandList: HTMLElement;
-  private commands: Command[] = [];
-  private filteredCommands: Command[] = [];
+  private searchResults: SearchResult[] = [];
   private selectedIndex: number = 0;
 
   constructor() {
@@ -20,19 +25,25 @@ class PopupUI {
   }
 
   private async initialize(): Promise<void> {
-    const response = await browser.runtime.sendMessage({ type: 'getCommands' });
-    this.commands = response.commands || [];
-    this.filteredCommands = this.commands;
-    
-    this.renderCommands();
+    await this.search('');
     this.setupEventListeners();
     this.searchInput.focus();
   }
 
+  private async search(query: string): Promise<void> {
+    const response = await browser.runtime.sendMessage({ 
+      type: 'searchCommands', 
+      query 
+    });
+    this.searchResults = response.results || [];
+    this.selectedIndex = 0;
+    this.renderCommands();
+  }
+
   private setupEventListeners(): void {
-    this.searchInput.addEventListener('input', (e) => {
+    this.searchInput.addEventListener('input', async (e) => {
       const query = (e.target as HTMLInputElement).value;
-      this.filterCommands(query);
+      await this.search(query);
     });
 
     this.searchInput.addEventListener('keydown', (e) => {
@@ -74,29 +85,16 @@ class PopupUI {
     });
   }
 
-  private filterCommands(query: string): void {
-    if (!query) {
-      this.filteredCommands = this.commands;
-    } else {
-      const normalizedQuery = query.toLowerCase();
-      this.filteredCommands = this.commands.filter(command => 
-        command.title.toLowerCase().includes(normalizedQuery) ||
-        (command.description && command.description.toLowerCase().includes(normalizedQuery))
-      );
-    }
-    this.selectedIndex = 0;
-    this.renderCommands();
-  }
-
   private renderCommands(): void {
     this.commandList.innerHTML = '';
     
-    if (this.filteredCommands.length === 0) {
+    if (this.searchResults.length === 0) {
       this.commandList.innerHTML = '<div class="no-results">No commands found</div>';
       return;
     }
 
-    this.filteredCommands.forEach((command, index) => {
+    this.searchResults.forEach((result, index) => {
+      const command = result.command;
       const commandItem = document.createElement('div');
       commandItem.className = 'command-item';
       if (index === this.selectedIndex) {
@@ -105,7 +103,13 @@ class PopupUI {
       
       const title = document.createElement('div');
       title.className = 'command-title';
-      title.textContent = command.title;
+      
+      // Highlight matched characters in fuzzy search
+      if (result.matches.length > 0 && this.searchInput.value) {
+        title.innerHTML = this.highlightMatches(command.title, result.matches);
+      } else {
+        title.textContent = command.title;
+      }
       
       commandItem.appendChild(title);
       
@@ -118,6 +122,28 @@ class PopupUI {
       
       this.commandList.appendChild(commandItem);
     });
+  }
+
+  private highlightMatches(text: string, matches: number[]): string {
+    if (matches.length === 0) return text;
+    
+    let result = '';
+    let lastIndex = 0;
+    
+    // Sort matches to ensure they're in order
+    const sortedMatches = [...matches].sort((a, b) => a - b);
+    
+    for (const matchIndex of sortedMatches) {
+      // Only highlight if the match is for the title (not description/keywords)
+      if (matchIndex < text.length) {
+        result += text.substring(lastIndex, matchIndex);
+        result += `<span class="match">${text[matchIndex]}</span>`;
+        lastIndex = matchIndex + 1;
+      }
+    }
+    
+    result += text.substring(lastIndex);
+    return result;
   }
 
   private updateSelection(): void {
@@ -133,7 +159,7 @@ class PopupUI {
   }
 
   private selectNext(): void {
-    if (this.selectedIndex < this.filteredCommands.length - 1) {
+    if (this.selectedIndex < this.searchResults.length - 1) {
       this.selectedIndex++;
       this.updateSelection();
     }
@@ -147,8 +173,8 @@ class PopupUI {
   }
 
   private async executeSelected(): Promise<void> {
-    if (this.selectedIndex >= 0 && this.selectedIndex < this.filteredCommands.length) {
-      const command = this.filteredCommands[this.selectedIndex];
+    if (this.selectedIndex >= 0 && this.selectedIndex < this.searchResults.length) {
+      const command = this.searchResults[this.selectedIndex].command;
       try {
         await browser.runtime.sendMessage({ 
           type: 'executeCommand', 
