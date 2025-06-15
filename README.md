@@ -1,0 +1,1 @@
+# thunderbird_command_palette
