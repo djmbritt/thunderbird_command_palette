@@ -1,0 +1,40 @@
+{
+  "manifest_version": 2,
+  "name": "Thunderbird Command Palette",
+  "version": "0.1.0",
+  "description": "A command palette for Thunderbird to quickly access commands and actions",
+  "author": "",
+  "applications": {
+    "gecko": {
+      "id": "command-palette@thunderbird",
+      "strict_min_version": "115.0"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "menus",
+    "compose",
+    "messagesRead",
+    "messagesMove",
+    "messagesTags",
+    "accountsRead",
+    "addressBooks"
+  ],
+  "commands": {
+    "open-command-palette": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Open command palette"
+    }
+  },
+  "browser_action": {
+    "default_title": "Open Command Palette"
+  }
+}
