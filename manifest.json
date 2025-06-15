@@ -24,7 +24,8 @@
     "messagesTags",
     "accountsRead",
     "accountsFolders",
-    "addressBooks"
+    "addressBooks",
+    "notifications"
   ],
   "commands": {
     "open-command-palette": {

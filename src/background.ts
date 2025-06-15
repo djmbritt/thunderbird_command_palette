@@ -96,6 +96,16 @@ class ThunderbirdCommandPalette {
       }
     });
 
+    this.registry.register({
+      id: 'fetch-all-emails',
+      title: 'Fetch All Emails',
+      description: 'Retrieve and display all emails from all accounts',
+      keywords: ['fetch', 'get', 'download', 'sync', 'all', 'messages'],
+      handler: async () => {
+        await this.fetchAllEmails();
+      }
+    });
+
     // Register unified folder commands
     this.registerUnifiedFolderCommands();
     
@@ -315,6 +325,109 @@ class ThunderbirdCommandPalette {
       console.error('Failed to switch to or create tab:', error);
       // Fallback: just create a new tab
       await browser.tabs.create({ url });
+    }
+  }
+
+  private async fetchAllEmails(): Promise<void> {
+    try {
+      // Get all mail accounts
+      const accounts = await (browser as any).accounts.list();
+      
+      console.log('Fetching emails from all accounts...');
+      
+      for (const account of accounts) {
+        if (account.type === 'imap' || account.type === 'pop3' || account.type === 'nntp') {
+          console.log(`Processing account: ${account.name}`);
+          
+          // Get all folders for this account
+          const folders = await (browser as any).folders.query({ accountId: account.id });
+          
+          for (const folder of folders) {
+            try {
+              // Get messages from this folder using folder.id (required for Thunderbird 121+)
+              const messages = await (browser as any).messages.list(folder.id);
+              console.log(`Found ${messages.messages?.length || 0} messages in ${folder.name}`);
+              
+              // For demonstration, we'll just log the message count
+              // In a real implementation, you might want to:
+              // - Display messages in a new tab
+              // - Store them locally
+              // - Show a progress indicator
+              
+            } catch (folderError) {
+              console.warn(`Failed to fetch messages from folder ${folder.name}:`, folderError);
+            }
+          }
+        }
+      }
+      
+      // Show a completion notification by opening a tab with results
+      await this.showEmailFetchResults();
+      
+    } catch (error) {
+      console.error('Failed to fetch all emails:', error);
+      // Show error message
+      await browser.tabs.create({ 
+        url: `data:text/html,<html><body><h1>Error Fetching Emails</h1><p>Failed to fetch emails: ${(error as Error).message}</p></body></html>` 
+      });
+    }
+  }
+
+  private async showEmailFetchResults(): Promise<void> {
+    try {
+      // Get all accounts and their message counts
+      const accounts = await (browser as any).accounts.list();
+      let totalMessages = 0;
+      let accountSummary = 'Email Fetch Complete!\n\nAccount Summary:\n';
+      
+      for (const account of accounts) {
+        if (account.type === 'imap' || account.type === 'pop3' || account.type === 'nntp') {
+          const folders = await (browser as any).folders.query({ accountId: account.id });
+          let accountMessageCount = 0;
+          
+          for (const folder of folders) {
+            try {
+              const messages = await (browser as any).messages.list(folder.id);
+              const count = messages.messages?.length || 0;
+              accountMessageCount += count;
+            } catch (error) {
+              console.warn(`Failed to count messages in ${folder.name}:`, error);
+            }
+          }
+          
+          totalMessages += accountMessageCount;
+          accountSummary += `• ${account.name}: ${accountMessageCount} messages\n`;
+        }
+      }
+      
+      accountSummary += `\nTotal Messages: ${totalMessages}`;
+      accountSummary += '\n\nCheck the browser console for detailed logs.';
+      
+      // Show results in console and notification
+      console.log('='.repeat(50));
+      console.log(accountSummary);
+      console.log('='.repeat(50));
+      
+      // Try to show a notification or fallback to opening 3pane with focus
+      try {
+        // If notifications are available, use them
+        if (browser.notifications) {
+          await browser.notifications.create({
+            type: 'basic',
+            iconUrl: browser.runtime.getURL('icon.png') || 'icon.png',
+            title: 'Email Fetch Complete',
+            message: `Found ${totalMessages} total messages across all accounts. Check console for details.`
+          });
+        }
+      } catch (notificationError) {
+        console.warn('Could not show notification:', notificationError);
+      }
+      
+      // Always open the main Thunderbird window to show completion
+      await this.switchToOrCreateTab('about:3pane');
+      
+    } catch (error) {
+      console.error('Failed to show email fetch results:', error);
     }
   }
 
