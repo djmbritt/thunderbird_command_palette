@@ -48,28 +48,22 @@ Text to paste into the ATN listing and submission forms. Not shipped in the
 
 ## Notes to reviewer
 
-> **No build step.** The submitted files are the source: plain HTML, CSS and JavaScript, not minified or generated. The GitHub repository additionally contains dev-only tooling (tests, TypeScript type checking, a type generator) that is excluded from the .xpi by `package.sh`.
->
-> **How to test**
-> 1. Press Ctrl+Shift+P in the main window (or click the toolbar button). The palette opens as the toolbar button's popup.
-> 2. Type to filter, ↑/↓ to move, Enter to run, Esc to close. Try "reply", "archive", "go to inbox", "sort", "layout".
-> 3. Message commands only appear when a message is selected. Compose commands (Send Later, Send from…, Set Priority…) only appear when the palette is opened from a compose window.
-> 4. Pickers: "Move to Folder…", "Tag with…", "Switch to Tab…", "Write to…" open a sub-list; Esc goes back.
-> 5. Prefixes: `@` folders, `#` tags, `?` message search (e.g. `?invoice`), `>` commands only.
-> 6. Delete, Empty Trash and Send Later need Enter twice.
-> No accounts or credentials are needed beyond any mail account (Local Folders is enough for most commands).
->
-> **Why an Experiment API** (`experiments/implementation.js`, `messenger.palette.*`). Each function covers something no built-in MailExtension API provides:
-> - `getNewMail(accountId?)`: trigger Get New Messages (all accounts via `cmd_getMsgsForAuthAccounts`, or one account's incoming server). There is no WebExtension API to fetch mail.
-> - `openSettings()` / `openAccountSettings(accountId?)`: open Thunderbird's own Settings tab and Account Settings. `runtime.openOptionsPage` only opens an add-on's own options.
-> - `runCommand(command)`: dispatch one of a fixed allowlist of built-in commands (`ALLOWED_COMMANDS`): cmd_undo, cmd_redo, cmd_compactFolder, cmd_expandAllThreads, cmd_collapseAllThreads, cmd_print, cmd_viewPageSource. Any other id is rejected. There are no WebExtension APIs for undo/redo, compacting, expanding/collapsing threads, printing a message or Thunderbird's source view.
-> - `toggleTodayPane()`: show/hide the calendar Today pane. No API exists.
-> - `openSpace(name)`: open a built-in space (allowlist: mail, addressbook, calendar, tasks, chat, settings). The `spaces.open` API only opens spaces created by the calling extension.
-> - `getUIFontSize()`: read Thunderbird's UI font size (`mail.uifontsize`) so the popup matches it. No API exposes it.
->
-> The experiment only reads the one font-size preference, never writes preferences, and makes no network requests of its own (Get New Mail asks Thunderbird to check mail as its toolbar button does). If it fails to load, the popup hides these commands and everything else keeps working (each function is feature-detected).
->
-> **Permissions:** each permission and what it's used for is listed in the privacy policy; none are requested for future use.
+Plain text, pasted as is:
+
+```
+Plain HTML/CSS/JS, no build step, nothing minified or generated. Source: https://github.com/djmbritt/thunderbird_command_palette (dev-only tooling there is excluded from the .xpi). Tested on Thunderbird 158 with end-to-end tests.
+
+How to test: press Ctrl+Shift+P (or click the toolbar button), type to filter, Enter to run, Esc to close. Message commands appear when a message is selected; compose commands when opened from a compose window. Prefixes: @ folders, # tags, ? message search. Delete, Empty Trash and Send Later need Enter twice. Local Folders is enough to test most commands.
+
+Why an Experiment (experiments/implementation.js): each function covers something no MailExtension API provides:
+- getNewMail: trigger Get New Messages.
+- openSettings / openAccountSettings: open Thunderbird's Settings and Account Settings.
+- runCommand: only an allowlist of built-in commands (undo, redo, compact, expand/collapse threads, print, view source); anything else is rejected.
+- toggleTodayPane: show/hide the Today pane.
+- openSpace: open a built-in space (allowlisted); spaces.open only opens the extension's own spaces.
+- getUIFontSize: read mail.uifontsize so the popup matches Thunderbird's font size.
+It reads only that one preference, writes none, and makes no network requests of its own. Every function is feature-detected, so the add-on still works if the experiment fails to load.
+```
 
 ## Screenshots
 
