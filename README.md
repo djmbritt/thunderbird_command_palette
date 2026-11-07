@@ -11,7 +11,7 @@ The missing command palette for Thunderbird. Press <kbd>Ctrl</kbd>+<kbd>Shift</k
   - archive, delete, open in a new tab or window, print, view source.
 - **Move / Copy to Folder…** Pick a destination by typing part of its name. Recent destinations come first.
 - **Folders:**
-  - *Go to* any folder (with unread counts), or a unified folder (Unified Inbox, Sent, …);
+  - *Go to* any folder, or a unified folder (Unified Inbox, Sent, …);
   - mark a folder as read, add it to favourites, compact folders, empty trash.
 - **Tags:** *Tag with…* toggles a tag on the selection, plus *Remove All Tags* and *Go to Tag*.
 - **View:**
