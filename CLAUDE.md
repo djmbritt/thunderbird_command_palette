@@ -45,6 +45,15 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 
 `render()` rebuilds the list only when the filtered set changes (`refilter`). Selection changes (arrows, hover) go through `select(i)`, which repaints just the old and new rows via `paintRow`. Hover selection uses `mousemove`, not `mouseenter`, so rows scrolling under a stationary pointer during keyboard navigation don't steal the selection. The input is an ARIA combobox: `aria-activedescendant` points at the selected `opt-<i>` row.
 
+### Picker mode (Move / Copy to Folder…)
+
+A command with a `picker` function opens a sub-list instead of running. `picker()` returns `{ title, empty, items }`; `items` are ordinary commands (with `id`, `label`, `run`, …). While a picker is open:
+- `#mode` shows the title banner (e.g. "Move 3 messages to…"), and filtering runs over `picker.items` instead of `commands`;
+- Esc, or Backspace on an empty query, returns to the root list (Esc in the root list closes the popup);
+- running an item records MRU for both the item (e.g. `move-to:<folderId>`) and the parent command, so recent destinations sort first.
+
+Move/Copy destinations come from `folderEntries` (built once by `collectFolders`, shared with "Go to:"). Virtual, unified and tag folders are excluded since they can't hold real messages; Move also excludes the folder every selected message already lives in.
+
 ### Destructive actions
 
 Commands with `destructive: true` (Delete, Empty Trash):
@@ -113,11 +122,12 @@ Append to `STATIC_ACTIONS` in `popup/palette.js`:
   keywords: "hidden search terms",  // fuzzy-matched only, never displayed
   requires: "message",              // optional gate; hidden when no message selected/displayed
   destructive: true,                // optional; two-step confirm + excluded from MRU
+  picker: () => ({ title, empty, items }), // optional; opens a sub-list instead of `run` (see Picker mode)
   run: async () => { /* messenger.* calls; use ctx.selectedMessages */ }
 }
 ```
 
-The `run` function is called with no args. The popup closes after it resolves (or throws — errors are logged). Check that any new API call is covered by `permissions` in `manifest.json` (e.g. `messages.delete` needs `messagesDelete`); request only what's used.
+The `run` function is called with no args. The popup closes after it resolves (or throws — errors are logged). Check that any new API call is covered by `permissions` in `manifest.json` (e.g. `messages.delete` needs `messagesDelete`; `messages.move`/`copy` need `messagesMove`); request only what's used.
 
 For actions that need Thunderbird internals, add a function to `experiments/schema.json` + `experiments/implementation.js` and gate the command on `HAS_EXPERIMENT` in `buildExperimentCommands`.
 

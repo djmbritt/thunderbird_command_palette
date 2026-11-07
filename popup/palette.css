@@ -121,3 +121,12 @@ html, body {
   background: #5a1d1d;
   color: #f48771;
 }
+
+/* Picker-mode banner, e.g. "Move 3 messages to…". */
+#mode {
+  padding: 6px 12px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+}

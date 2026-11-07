@@ -16,6 +16,7 @@
 const queryEl = document.getElementById("query");
 const resultsEl = document.getElementById("results");
 const emptyEl = document.getElementById("empty");
+const modeEl = document.getElementById("mode");
 
 let commands = [];
 let filtered = [];
@@ -134,6 +135,7 @@ async function executeAndClose(cmd) {
     if (success && !cmd.destructive) {
       // Persist MRU before closing — popup teardown can race with pending
       // storage writes if not awaited.
+      if (picker) await recordUsage(picker.parent.id);
       await recordUsage(cmd.id || cmd.label);
     }
     window.close();
@@ -218,6 +220,30 @@ const STATIC_ACTIONS = [
     run: () => messenger.messages.archive(ctx.selectedMessages.map(m => m.id))
   },
   {
+    id: "move-to",
+    label: "Move to Folder…",
+    icon: "⇥",
+    keywords: "file",
+    requires: "message",
+    picker: () => ({
+      title: `Move ${selectionText()} to…`,
+      empty: "No matching folders.",
+      items: destinationItems("move", (ids, f) => messenger.messages.move(ids, f), { excludeSource: true })
+    })
+  },
+  {
+    id: "copy-to",
+    label: "Copy to Folder…",
+    icon: "⧉",
+    keywords: "duplicate",
+    requires: "message",
+    picker: () => ({
+      title: `Copy ${selectionText()} to…`,
+      empty: "No matching folders.",
+      items: destinationItems("copy", (ids, f) => messenger.messages.copy(ids, f), { excludeSource: false })
+    })
+  },
+  {
     id: "delete",
     label: "Delete (Move to Trash)",
     icon: "✕",
@@ -297,7 +323,11 @@ function buildExperimentCommands(accounts) {
   return out;
 }
 
-function buildFolderCommands(accounts) {
+// Flat list of navigable folders across all accounts, built once in init().
+// Shared by "Go to:" commands and the Move/Copy destination pickers.
+let folderEntries = [];
+
+function collectFolders(accounts) {
   const out = [];
 
   function walk(folder, accountName, parentPath) {
@@ -306,23 +336,16 @@ function buildFolderCommands(accounts) {
     // fall back to a path === "/" check.)
     const isRoot = folder.isRoot === true || folder.path === "/" || folder.path === "";
     if (!isRoot) {
-      const breadcrumb = parentPath ? `${accountName} · ${parentPath}` : accountName;
-      // Mark unified folders explicitly so the user can tell "Inbox" (per-
-      // account) apart from the cross-account aggregate. The unified inbox
-      // typically lives under the Smart Folders / Unified account.
-      const displayName = folder.isUnified ? `Unified ${folder.name}` : folder.name;
       out.push({
-        id: `goto-folder:${folder.id}`,
-        label: `Go to: ${displayName}`,
-        // Index where the folder name starts in `label`. The name is scored on
-        // its own too, so typing "inbox" gets the prefix bonus on "Inbox".
-        nameStart: "Go to: ".length,
-        hint: breadcrumb,
+        folder,
+        // Mark unified folders explicitly so the user can tell "Inbox" (per-
+        // account) apart from the cross-account aggregate.
+        displayName: folder.isUnified ? `Unified ${folder.name}` : folder.name,
+        breadcrumb: parentPath ? `${accountName} · ${parentPath}` : accountName,
         icon: specialIcon(folder.specialUse),
-        // Match against folder name + breadcrumb + path + special-use tags.
-        // Adding "unified" lets users find the aggregate folder by typing it.
-        keywords: `${accountName} ${folder.path || ""} ${(folder.specialUse || []).join(" ")}${folder.isUnified ? " unified" : ""}`,
-        run: () => switchToFolder(folder)
+        // Match against account + path + special-use tags. "unified" lets
+        // users find the aggregate folder by typing it.
+        keywords: `${accountName} ${folder.path || ""} ${(folder.specialUse || []).join(" ")}${folder.isUnified ? " unified" : ""}`
       });
     }
     const childParentPath = isRoot
@@ -335,6 +358,44 @@ function buildFolderCommands(accounts) {
     if (a.rootFolder) walk(a.rootFolder, a.name, "");
   }
   return out;
+}
+
+function buildFolderCommands(entries) {
+  return entries.map(e => ({
+    id: `goto-folder:${e.folder.id}`,
+    label: `Go to: ${e.displayName}`,
+    // Index where the folder name starts in `label`. The name is scored on
+    // its own too, so typing "inbox" gets the prefix bonus on "Inbox".
+    nameStart: "Go to: ".length,
+    hint: e.breadcrumb,
+    icon: e.icon,
+    keywords: e.keywords,
+    run: () => switchToFolder(e.folder)
+  }));
+}
+
+function selectionText() {
+  const n = ctx.selectedMessages.length;
+  return n === 1 ? "1 message" : `${n} messages`;
+}
+
+// Destination items for the Move/Copy pickers. Virtual (saved search),
+// unified and tag folders can't hold real messages, so they're excluded.
+// For moves, the folder all selected messages already live in is excluded too.
+function destinationItems(verb, transfer, { excludeSource }) {
+  const sources = new Set(ctx.selectedMessages.map(m => m.folder?.id).filter(Boolean));
+  const soleSource = excludeSource && sources.size === 1 ? [...sources][0] : null;
+  return folderEntries
+    .filter(e => !e.folder.isVirtual && !e.folder.isUnified && !e.folder.isTag)
+    .filter(e => e.folder.id !== soleSource)
+    .map(e => ({
+      id: `${verb}-to:${e.folder.id}`,
+      label: e.displayName,
+      hint: e.breadcrumb,
+      icon: e.icon,
+      keywords: e.keywords,
+      run: () => transfer(ctx.selectedMessages.map(m => m.id), e.folder.id)
+    }));
 }
 
 function specialIcon(specialUse) {
@@ -399,7 +460,7 @@ function filterCommands(query) {
   const isEmpty = !query;
   const scored = [];
 
-  for (const cmd of commands) {
+  for (const cmd of (picker ? picker.items : commands)) {
     if (cmd.requires === "message" && !haveMessage) continue;
     const cmdId = cmd.id || cmd.label;
 
@@ -550,9 +611,39 @@ function disarm() {
   if (i !== -1) paintRow(i);
 }
 
+// Picker mode: a command with `picker` swaps the list for a sub-list (e.g.
+// Move to Folder… → destination folders) instead of running. Esc or
+// Backspace on an empty query returns to the root list.
+let picker = null; // { title, empty, items, parent }
+const ROOT_PLACEHOLDER = queryEl.placeholder;
+const ROOT_EMPTY = emptyEl.textContent;
+
+function openPicker(cmd) {
+  picker = { ...cmd.picker(), parent: cmd };
+  modeEl.textContent = picker.title;
+  modeEl.hidden = false;
+  queryEl.placeholder = "Type a folder name…";
+  emptyEl.textContent = picker.empty || ROOT_EMPTY;
+  queryEl.value = "";
+  refilter();
+}
+
+function closePicker() {
+  picker = null;
+  modeEl.hidden = true;
+  queryEl.placeholder = ROOT_PLACEHOLDER;
+  emptyEl.textContent = ROOT_EMPTY;
+  queryEl.value = "";
+  refilter();
+}
+
 function execSelected() {
   const entry = filtered[selectedIndex];
   if (!entry) return;
+  if (entry.cmd.picker) {
+    openPicker(entry.cmd);
+    return;
+  }
   if (entry.cmd.destructive && armedCmd !== entry.cmd) {
     armedCmd = entry.cmd;
     paintRow(selectedIndex);
@@ -586,7 +677,11 @@ queryEl.addEventListener("keydown", (e) => {
     execSelected();
   } else if (e.key === "Escape") {
     e.preventDefault();
-    window.close();
+    if (picker) closePicker();
+    else window.close();
+  } else if (e.key === "Backspace" && picker && queryEl.value === "") {
+    e.preventDefault();
+    closePicker();
   }
 });
 
@@ -599,7 +694,8 @@ async function init() {
     messenger.accounts.list(true),
     captureContext()
   ]);
-  const folderCommands = buildFolderCommands(accounts);
+  folderEntries = collectFolders(accounts);
+  const folderCommands = buildFolderCommands(folderEntries);
   const experimentCommands = buildExperimentCommands(accounts);
   commands = [...STATIC_ACTIONS, ...experimentCommands, ...folderCommands];
   refilter();
