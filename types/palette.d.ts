@@ -98,3 +98,16 @@ interface CommandSourceEntry {
 
 /** Provider for "?" message search (see registerMessageSearch). */
 type MessageSearch = (text: string) => Promise<Command[]>;
+
+/** Another add-on's command, from messenger.palette.listAddonCommands(). */
+interface AddonCommand {
+  extensionId: string;
+  extensionName: string;
+  /** Command name, or _execute_action / _execute_compose_action / … for buttons. */
+  command: string;
+  /** The command's description, or the button's title. */
+  label: string;
+  /** Assigned keyboard shortcut, or "". */
+  shortcut: string;
+  kind: "command" | "action" | "composeAction" | "messageDisplayAction";
+}

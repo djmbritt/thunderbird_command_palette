@@ -628,3 +628,45 @@ test("the toggle turns timing on, and turning it off clears saved runs", async (
   assert.equal(off.local.get("debugStartupTiming"), undefined);
   assert.equal(off.store.startupTimings, undefined);
 });
+
+// ---- Other add-ons' commands -------------------------------------------------
+
+const ADDON_COMMANDS = [
+  { extensionId: "editor@x", extensionName: "External Editor", command: "open-editor", label: "Edit in external editor", shortcut: "Ctrl+E", kind: "command" },
+  { extensionId: "editor@x", extensionName: "External Editor", command: "_execute_action", label: "Editor settings", shortcut: "", kind: "action" },
+  { extensionId: "quote@x", extensionName: "Quoter", command: "_execute_compose_action", label: "Insert quote", shortcut: "", kind: "composeAction" },
+  { extensionId: "rate@x", extensionName: "Rater", command: "_execute_message_display_action", label: "Rate message", shortcut: "", kind: "messageDisplayAction" }
+];
+
+function addonExperiment(rec) {
+  return { ...experiment(rec), listAddonCommands: async () => ADDON_COMMANDS, runAddonCommand: rec("runAddonCommand") };
+}
+
+test("other add-ons' commands are listed as '<Add-on>: <command>' and run through the experiment", async () => {
+  const calls = [];
+  const rec = (name) => async (...a) => { calls.push([name, ...a]); };
+  const p = await loadPalette({ palette: addonExperiment(rec) });
+  p.type("edit in external");
+  assert.equal(p.labels()[0], "External Editor: Edit in external editor");
+  assert.equal(p.hints()[0], "Ctrl+E");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(calls, [["runAddonCommand", "editor@x", "open-editor"]]);
+  assert.deepEqual(p.store.mru, ["addon:editor@x:open-editor"]);
+});
+
+test("add-on buttons follow their context: compose buttons need a compose window, message buttons a message", async () => {
+  const rec = () => async () => {};
+  let p = await loadPalette({ palette: addonExperiment(rec) });
+  assert.ok(p.labels().includes("External Editor: Editor settings"), "toolbar buttons are always listed");
+  assert.ok(p.labels().includes("Rater: Rate message"), "message button with a selection");
+  assert.ok(!p.labels().includes("Quoter: Insert quote"), "no compose button outside a compose window");
+  p = await loadPalette({ selected: [], palette: addonExperiment(rec) });
+  assert.ok(!p.labels().includes("Rater: Rate message"), "no message button without a message");
+});
+
+test("no add-on commands without the experiment function", async () => {
+  const p = await loadPalette({ palette: experiment(() => async () => {}) });
+  p.type("external editor");
+  assert.ok(!p.labels().some(l => l.startsWith("External Editor:")));
+});

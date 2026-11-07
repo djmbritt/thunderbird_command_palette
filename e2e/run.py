@@ -319,6 +319,24 @@ def message_search_ignores_case(tb):
 
 
 @test
+def other_addon_commands(tb):
+    tb.js("""
+      await showInbox();
+      // A shortcut command of another add-on (e2e/fixtures/test-addon).
+      await run("e2e test add-on say hello", "E2E Test Add-on: Say hello");
+      const { ExtensionStorageIDB } = ChromeUtils.importESModule("resource://gre/modules/ExtensionStorageIDB.sys.mjs");
+      const other = ExtensionParent.GlobalManager.getExtension("test-addon@e2e.example");
+      const db = await ExtensionStorageIDB.open(ExtensionStorageIDB.getStoragePrincipal(other));
+      await until(async () => (await db.get("lastCommand")).lastCommand === "say-hello", "the test add-on to receive say-hello");
+      // Its toolbar button: the palette closes first, then the button's popup opens.
+      await run("e2e test add-on test button", "E2E Test Add-on: Test button");
+      const popup = await until(() => [...W().document.querySelectorAll("browser")].find(b =>
+        String(b.currentURI?.spec).endsWith("/popup.html") && b.closest("panel")?.state === "open"), "the test add-on's popup");
+      popup.closest("panel").hidePopup();
+    """)
+
+
+@test
 def write_to_contact(tb):
     return tb.js("""
       const dir = MailServices.ab.getDirectory("jsaddrbook://abook.sqlite");

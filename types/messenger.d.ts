@@ -9038,6 +9038,14 @@ declare namespace messenger {
        * Open a built-in Thunderbird space (mail, addressbook, calendar, tasks, chat, settings).
        */
       openSpace(name: string): Promise<any>;
+      /**
+       * List the commands of the other running add-ons: every keyboard-shortcut command each declares (as in Manage Extension Shortcuts) and its toolbar, compose and message toolbar buttons. Resolves to an array of { extensionId, extensionName, command, label, shortcut, kind }, where kind is command, action, composeAction or messageDisplayAction.
+       */
+      listAddonCommands(): Promise<any>;
+      /**
+       * Run another add-on's command, or click its button, the way its keyboard shortcut would. Only commands returned by listAddonCommands are accepted. Runs shortly after the call returns, once the palette popup has closed.
+       */
+      runAddonCommand(extensionId: string, command: string): Promise<any>;
     }
     interface permissions {
       /**

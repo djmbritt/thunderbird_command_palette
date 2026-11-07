@@ -24,6 +24,9 @@ var { ExtensionUtils } = ChromeUtils.importESModule(
   "resource://gre/modules/ExtensionUtils.sys.mjs"
 );
 var { ExtensionError } = ExtensionUtils;
+var { ExtensionParent } = ChromeUtils.importESModule(
+  "resource://gre/modules/ExtensionParent.sys.mjs"
+);
 
 // `Services` is auto-available as a global in privileged JSM/sys.mjs scope.
 
@@ -62,6 +65,86 @@ const ALLOWED_COMMANDS = new Set([
 
 // Built-in spaces openSpace() may open (names from gSpacesToolbar.spaces).
 const ALLOWED_SPACES = new Set(["mail", "addressbook", "calendar", "tasks", "chat", "settings"]);
+
+// ---- Other add-ons' commands ------------------------------------------------
+//
+// Add-ons can't see each other's commands through the WebExtension API, so
+// the palette lists them here: every shortcut command an add-on declares (the
+// list in Manage Extension Shortcuts) and its toolbar / compose / message
+// buttons. Running one goes through the same code paths as Thunderbird's own
+// shortcut keys.
+
+// Button kinds: manifest key → [implicit command name, kind, default label].
+const ADDON_BUTTONS = [
+  ["action", "_execute_action", "action", "Toolbar button"],
+  ["browser_action", "_execute_browser_action", "action", "Toolbar button"],
+  ["compose_action", "_execute_compose_action", "composeAction", "Compose toolbar button"],
+  ["message_display_action", "_execute_message_display_action", "messageDisplayAction", "Message toolbar button"],
+];
+const BUTTON_KINDS = new Map(ADDON_BUTTONS.map(([key, command, kind]) => [command, { key, kind }]));
+
+// Other running add-ons (not this one, not shut down).
+function otherAddons(selfId) {
+  return [...ExtensionParent.GlobalManager.extensionMap.values()]
+    .filter(ext => ext.id !== selfId && !ext.hasShutdown);
+}
+
+async function addonCommands(ext) {
+  const out = [];
+  const declared = ext.shortcuts ? await ext.shortcuts.allCommands() : [];
+  for (const { name, description, shortcut } of declared) {
+    const button = BUTTON_KINDS.get(name);
+    const buttonLabel = button && (ext.manifest[button.key]?.default_title ||
+      ADDON_BUTTONS.find(([, command]) => command === name)[3]);
+    out.push({
+      extensionId: ext.id,
+      extensionName: ext.name,
+      command: name,
+      label: description || buttonLabel || name,
+      shortcut: shortcut || "",
+      kind: button ? button.kind : "command",
+    });
+  }
+  // Buttons without a declared _execute_* command can still be clicked.
+  for (const [key, command, kind, fallback] of ADDON_BUTTONS) {
+    if (!ext.manifest[key] || out.some(c => c.command === command)) continue;
+    out.push({
+      extensionId: ext.id,
+      extensionName: ext.name,
+      command,
+      label: ext.manifest[key].default_title || fallback,
+      shortcut: "",
+      kind,
+    });
+  }
+  return out;
+}
+
+// Run an add-on command or click its button, like its shortcut key would.
+function triggerAddonCommand(ext, command) {
+  const global = ExtensionParent.apiManager.global;
+  const button = BUTTON_KINDS.get(command);
+  if (!button) {
+    ext.tabManager.addActiveTabPermission();
+    ext.shortcuts.onCommand(command);
+    return;
+  }
+  if (button.kind === "composeAction") {
+    const composeWin = Services.wm.getMostRecentWindow("msgcompose");
+    if (!composeWin) throw new Error("No compose window is open");
+    global.composeActionFor(ext).triggerAction(composeWin);
+    return;
+  }
+  const win = getMainWindow();
+  if (!win) throw new Error("No Thunderbird main window available");
+  const actionFor = button.kind === "messageDisplayAction" ? global.messageDisplayActionFor : global.browserActionFor;
+  actionFor(ext).triggerAction(win);
+}
+
+// Delay before running another add-on's command: Thunderbird won't open an
+// add-on popup while the palette's own popup is still open, and the palette
+// closes right after the call returns.
+const ADDON_COMMAND_DELAY_MS = 150;
 
 // Windows that may host a controller for a mail command. Since TB 115 most
 // 3-pane commands are handled inside the about:3pane / about:message
@@ -219,6 +302,29 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
             return;
           }
           throw new ExtensionError("Account Settings cannot be opened on this Thunderbird version");
+        },
+
+        async listAddonCommands() {
+          const lists = await Promise.all(otherAddons(context.extension.id).map(addonCommands));
+          return lists.flat();
+        },
+
+        async runAddonCommand(extensionId, command) {
+          const ext = otherAddons(context.extension.id).find(e => e.id === extensionId);
+          if (!ext) throw new ExtensionError(`Add-on not found or not running: ${extensionId}`);
+          const known = await addonCommands(ext);
+          if (!known.some(c => c.command === command)) {
+            throw new ExtensionError(`Add-on ${extensionId} has no command "${command}"`);
+          }
+          // Run after the palette has closed (see ADDON_COMMAND_DELAY_MS).
+          // Errors past this point can't reach the palette, so log them.
+          getMainWindow()?.setTimeout(() => {
+            try {
+              triggerAddonCommand(ext, command);
+            } catch (e) {
+              console.error(`[palette] add-on command ${extensionId} ${command} failed`, e);
+            }
+          }, ADDON_COMMAND_DELAY_MS);
         }
       }
     };

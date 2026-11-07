@@ -31,6 +31,7 @@ Text to paste into the ATN listing and submission forms. Not shipped in the
 > - **Navigation:** switch to any open tab, write to a contact, open Calendar, Tasks, Chat or the Address Book, toggle the Today pane.
 > - **While composing:** Send Later, save as draft or template, change the sending identity, set priority, request receipts.
 > - **Undo / Redo**, Get New Mail, Settings and Account Settings.
+> - **Other add-ons:** run any other add-on's shortcut commands and click its toolbar, compose or message buttons from the palette.
 >
 > **Fast to use**
 > - Fuzzy search: "gtp" finds "Go to: Projects", "arch" finds "Archive".
@@ -62,6 +63,7 @@ Why an Experiment (experiments/implementation.js): each function covers somethin
 - toggleTodayPane: show/hide the Today pane.
 - openSpace: open a built-in space (allowlisted); spaces.open only opens the extension's own spaces.
 - getUIFontSize: read mail.uifontsize so the popup matches Thunderbird's font size.
+- listAddonCommands / runAddonCommand: list other add-ons' declared shortcut commands and action buttons, and run one the way its shortcut key would (shortcuts.onCommand / triggerAction). Add-ons can't see each other's commands through the WebExtension API. Only commands an add-on itself declares can be run.
 It reads only that one preference, writes none, and makes no network requests of its own. Every function is feature-detected, so the add-on still works if the experiment fails to load.
 ```
 

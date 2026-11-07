@@ -17,6 +17,8 @@ mkdir -p "$profile/extensions" "$profile/Mail/Local Folders"
 # Extension proxy file: the file name is the add-on id, the content is the
 # source directory. Lets the tests run the working tree without packaging.
 printf '%s\n' "$here" > "$profile/extensions/$id"
+# A second add-on whose commands the palette should list and run.
+printf '%s\n' "$here/e2e/fixtures/test-addon" > "$profile/extensions/test-addon@e2e.example"
 
 cat > "$profile/user.js" <<'PREFS'
 // Load the add-on from the profile without asking.

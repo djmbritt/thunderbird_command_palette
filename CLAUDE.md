@@ -129,6 +129,7 @@ popup/commands/view.js         Quick filters, Sort by…, Reverse Sort, View: Th
 popup/commands/thunderbird.js  Experiment-backed: Undo/Redo, Compact, Expand/Collapse Threads, Print, View Source, Today Pane, Get Mail, Settings; Configure Keyboard Shortcuts; Address Book.
 popup/commands/navigation.js   Switch to Tab…, Write to… (contacts), Open Calendar/Tasks/Chat.
 popup/commands/folders.js      Mark Folder as Read, Favorites toggle, Empty Trash, Go to: Unified …, Go to: <folder>.
+popup/commands/addons.js       Other add-ons' shortcut commands and buttons (deferred; experiment listAddonCommands / runAddonCommand).
 popup/commands/search.js       "?" message search provider.
 lib/fuzzy.js                   Subsequence scorer + segments() for highlighting (rendered as DOM nodes; never set innerHTML). Loads in the popup (window.Fuzzy) and Node (module.exports).
 lib/vcard.js                   Minimal vCard reader (FN/N + EMAIL) for contacts. Popup (window.VCard) and Node.
@@ -138,6 +139,7 @@ tests/features.test.js         Command groups: view, folder actions, tags, prefi
 tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
 e2e/run.py                     End-to-end tests in a real Thunderbird (npm run test:e2e); see e2e/README.md.
 e2e/make-profile.sh            Throwaway test profile: Local Folders with test messages, add-on loaded from the working tree.
+e2e/fixtures/test-addon/       A second add-on (a shortcut command + a toolbar button) for the other-add-ons test.
 e2e/marionette.py              Minimal Marionette (Gecko remote control) client used by run.py.
 e2e/screenshots.py             Takes the ATN listing screenshots (store/screenshots/) from a demo profile.
 types/api-since.json           GENERATED: Thunderbird version that added each namespace/function/event/property; used by check-since.
@@ -200,12 +202,15 @@ messenger.palette.getUIFontSize()                 // px; 0 if unknown
 messenger.palette.runCommand(command)             // allowlisted cmd_* (see ALLOWED_COMMANDS)
 messenger.palette.toggleTodayPane()
 messenger.palette.openSpace(name)                 // built-in space: calendar, tasks, chat, …
+messenger.palette.listAddonCommands()             // other add-ons' shortcut commands and buttons
+messenger.palette.runAddonCommand(extensionId, command)
 ```
 
 Implementation strategy:
 - **Main window**: only `Services.wm.getMostRecentWindow("mail:3pane")`. No fallback to `getMostRecentWindow(null)` — that can return a compose/message window lacking `goDoCommand`/`msgWindow`.
 - **runCommand** only accepts ids in `ALLOWED_COMMANDS` (undo, redo, compact, expand/collapse threads, print, view source). `dispatchCommand` looks for a controller in `tabmail.currentAboutMessage`, then `currentAbout3Pane`, then the outer window, because since TB 115 most mail commands live in the inner about:3pane / about:message documents. It throws distinct errors for "not supported by this version" and "not available right now" (e.g. nothing to undo), unlike `goDoCommand`, which fails silently.
 - **openSpace** uses `gSpacesToolbar.spaces` / `openSpace(tabmail, space)`. The public `spaces.open()` only opens spaces the extension created. Names are allowlisted.
+- **Other add-ons' commands**: `listAddonCommands` walks `ExtensionParent.GlobalManager.extensionMap` (skipping itself) and returns each add-on's `shortcuts.allCommands()` (what Manage Extension Shortcuts lists) plus its `action` / `browser_action` / `compose_action` / `message_display_action` buttons as the implicit `_execute_*` commands. `runAddonCommand` only accepts a command that list contains, and runs it as Thunderbird's shortcut keys do: `shortcuts.onCommand(name)` (after `tabManager.addActiveTabPermission()`), or `browserActionFor` / `messageDisplayActionFor` / `composeActionFor(ext).triggerAction(win)` (compose buttons in the most recent compose window). It runs **150 ms after returning** (`ADDON_COMMAND_DELAY_MS`): Thunderbird won't open another add-on's popup while the palette's popup is open, and the palette closes once the call resolves. So failures past that point can't reach the popup; they're logged to the browser console. A toolbar button only works in spaces where that add-on's button is on the toolbar.
 - **toggleTodayPane** fires the main window's `calendar_toggle_todaypane_command` (what View → Today Pane runs). Calling `TodayPane.toggleVisibility()` directly throws: it needs the command's event to flip the command's `checked` state.
 - **All-accounts get new mail** uses `win.goDoCommand("cmd_getMsgsForAuthAccounts")` — same command as the toolbar's "Get All New Messages".
 - **Per-account get new mail** maps the MailExtension `accountId` (= `nsIMsgAccount.key`) via `MailServices.accounts.accounts`, then calls `server.getNewMessages(rootFolder, msgWindow, null)`, falling back to `server.performBiff`. The popup does not list per-account entries for Local Folders (`type === "none"`).

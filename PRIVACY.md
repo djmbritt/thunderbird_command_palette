@@ -16,6 +16,7 @@ The add-on reads your Thunderbird data only to carry out the command you choose,
 - **Compose windows**: to read and change the sending identity, priority and receipt options of the message you're writing, and to send it later or save it.
 - **Tags**: to list your tags for *Tag with…* and *Go to Tag*.
 - **Notifications**: to confirm actions whose result isn't visible, such as moving messages.
+- **Other add-ons**: to list the names and keyboard-shortcut commands of your other installed add-ons (and their toolbar buttons), so you can run them from the palette. The add-on only runs one when you choose it.
 
 All of this happens inside Thunderbird on your computer.
 
@@ -31,7 +32,7 @@ This data never leaves your computer. Removing the add-on removes it.
 
 ## Privileged access
 
-Some commands (Get New Mail, Undo/Redo, Print, View Source, Compact Folders, Expand/Collapse Threads, the Today pane, opening Calendar/Tasks/Chat, Settings and Account Settings) use a small built-in "experiment" API, because Thunderbird doesn't offer these to add-ons otherwise. Because of it, Thunderbird asks you to grant the add-on full access. The experiment code only performs that fixed list of actions and does not read or send any data. It is in `experiments/implementation.js` in the [source code](https://github.com/djmbritt/thunderbird_command_palette).
+Some commands (Get New Mail, Undo/Redo, Print, View Source, Compact Folders, Expand/Collapse Threads, the Today pane, opening Calendar/Tasks/Chat, Settings and Account Settings, and other add-ons' commands) use a small built-in "experiment" API, because Thunderbird doesn't offer these to add-ons otherwise. Because of it, Thunderbird asks you to grant the add-on full access. The experiment code only performs that fixed list of actions and does not read or send any data. It is in `experiments/implementation.js` in the [source code](https://github.com/djmbritt/thunderbird_command_palette).
 
 ## Contact
 
