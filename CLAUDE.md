@@ -203,6 +203,8 @@ messenger.palette.runCommand(command)             // allowlisted cmd_* (see ALLO
 messenger.palette.toggleTodayPane()
 messenger.palette.openSpace(name)                 // built-in space: calendar, tasks, chat, …
 messenger.palette.openAddonsManager()             // Add-ons and Themes tab
+messenger.palette.listAboutPages()                // about: page names, as about:about lists them
+messenger.palette.openAboutPage(name)             // open about:<name> in a tab (or switch to it)
 messenger.palette.listAddonCommands()             // other add-ons' shortcut commands and buttons
 messenger.palette.runAddonCommand(extensionId, command)
 ```
@@ -216,6 +218,7 @@ Implementation strategy:
 - **All-accounts get new mail** uses `win.goDoCommand("cmd_getMsgsForAuthAccounts")` — same command as the toolbar's "Get All New Messages".
 - **Per-account get new mail** maps the MailExtension `accountId` (= `nsIMsgAccount.key`) via `MailServices.accounts.accounts`, then calls `server.getNewMessages(rootFolder, msgWindow, null)`, falling back to `server.performBiff`. The popup does not list per-account entries for Local Folders (`type === "none"`).
 - **UI font size** returns the `mail.uifontsize` pref if > 0 (the user's explicit Thunderbird font-size choice), else the main window's computed root font size (the default, which follows the OS).
+- **about: pages**: `listAboutPages` enumerates the `@mozilla.org/network/protocol/about;1?what=<name>` contracts and keeps those `about:about` shows (no `HIDE_FROM_ABOUTABOUT` flag), minus ones blocked by enterprise policy and `ABOUT_NOT_STANDALONE` (`3pane`, `message`, `newserror`: parts of other views). `openAboutPage` only accepts a listed name, and does what Settings → Config Editor does: switch to a tab already showing the page, else `tabmail.openTab("contentTab", { url })`. The palette (`thunderbird.js`, deferred) adds one *Open about:<name>* per page, with a hint for common ones (`ABOUT_PAGE_HINTS`).
 - **Open Add-ons and Themes** calls the main window's `openAddonsMgr()` (what Tools → Add-ons and Themes runs; it reuses an open Add-ons tab). `tabs.create({url: "about:addons"})` isn't allowed for extensions.
 - **Open Settings** tries `win.openPreferencesTab()`, then `openContentTab("about:preferences")`, then throws.
 - **Open Account Settings** tries `win.MsgAccountManager(null, server)`, then `openAccountSettingsTab({server})`, then throws.

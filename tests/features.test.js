@@ -681,3 +681,20 @@ test("Open Add-ons and Themes uses the experiment", async () => {
   await settle();
   assert.deepEqual(calls, [["openAddonsManager"]]);
 });
+
+test("about: pages are listed with hints and opened through the experiment", async () => {
+  const calls = [];
+  const rec = (name) => async (...a) => { calls.push([name, ...a]); };
+  const p = await loadPalette({
+    selected: [],
+    palette: { ...experiment(rec), listAboutPages: async () => ["config", "support", "logo"], openAboutPage: rec("openAboutPage") }
+  });
+  p.type("about:config");
+  assert.equal(p.labels()[0], "Open about:config");
+  assert.equal(p.hints()[0], "Config Editor");
+  p.type("troubleshooting");
+  assert.equal(p.labels()[0], "Open about:support", "found by its hint");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(calls, [["openAboutPage", "support"]]);
+});

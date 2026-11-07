@@ -9043,6 +9043,14 @@ declare namespace messenger {
        */
       openAddonsManager(): Promise<any>;
       /**
+       * List the about: pages Thunderbird has registered (names without the about: prefix), as about:about shows them: internal pages and pages blocked by enterprise policy are left out.
+       */
+      listAboutPages(): Promise<any>;
+      /**
+       * Open about: in a tab, or switch to a tab already showing it. Only names returned by listAboutPages are accepted.
+       */
+      openAboutPage(name: string): Promise<any>;
+      /**
        * List the commands of the other running add-ons: every keyboard-shortcut command each declares (as in Manage Extension Shortcuts) and its toolbar, compose and message toolbar buttons. Resolves to an array of { extensionId, extensionName, command, label, shortcut, kind }, where kind is command, action, composeAction or messageDisplayAction.
        */
       listAddonCommands(): Promise<any>;

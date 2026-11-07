@@ -161,3 +161,53 @@ registerCommands(({ accounts }) => [
   },
   ...buildExperimentCommands(accounts)
 ]);
+
+// ---- about: pages -----------------------------------------------------------
+//
+// One "Open about:<name>" command per page Thunderbird lists in about:about
+// (from the experiment; extensions can't open about: pages themselves).
+// Common pages get a short description as the hint.
+/** @type {Record<string, string>} */
+const ABOUT_PAGE_HINTS = {
+  about: "List of about: pages",
+  accountsettings: "Account Settings",
+  addons: "Add-ons and Themes",
+  addressbook: "Address Book",
+  buildconfig: "Build configuration",
+  certificate: "Certificate viewer",
+  config: "Config Editor",
+  crashes: "Crash reports",
+  debugging: "Debug Add-ons",
+  downloads: "Saved files",
+  import: "Import",
+  logging: "Logging",
+  memory: "Memory usage",
+  networking: "Networking",
+  performance: "Task manager",
+  policies: "Enterprise policies",
+  preferences: "Settings",
+  processes: "Processes",
+  profiling: "Profiler",
+  profiles: "Profiles",
+  rights: "Your rights",
+  serviceworkers: "Service workers",
+  support: "Troubleshooting Information",
+  telemetry: "Telemetry",
+  "third-party": "Third-party modules",
+  "url-classifier": "URL classifier",
+  webrtc: "WebRTC"
+};
+
+registerCommands(async () => {
+  if (typeof messenger.palette?.listAboutPages !== "function") return [];
+  /** @type {string[]} */
+  const names = await messenger.palette.listAboutPages();
+  return names.map(name => ({
+    id: `about-page:${name}`,
+    label: `Open about:${name}`,
+    hint: ABOUT_PAGE_HINTS[name],
+    icon: "ⓘ",
+    keywords: `about page internal advanced ${ABOUT_PAGE_HINTS[name] || ""}`,
+    run: () => messenger.palette.openAboutPage(name)
+  }));
+}, { deferred: true }); // an experiment round trip; not needed for the first paint

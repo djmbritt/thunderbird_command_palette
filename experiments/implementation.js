@@ -141,6 +141,35 @@ function triggerAddonCommand(ext, command) {
   actionFor(ext).triggerAction(win);
 }
 
+// ---- about: pages -----------------------------------------------------------
+//
+// The about: pages Thunderbird has registered, as listed by about:about:
+// internal ones (HIDE_FROM_ABOUTABOUT) and ones blocked by enterprise policy
+// are left out. Extensions can't open about: pages themselves.
+const ABOUT_CONTRACT_PREFIX = "@mozilla.org/network/protocol/about;1?what=";
+// Thunderbird documents that are part of other views, not pages to open on
+// their own (the inside of a mail tab, an error page).
+const ABOUT_NOT_STANDALONE = new Set(["3pane", "message", "newserror"]);
+
+function aboutPages() {
+  const names = [];
+  for (const contract of Object.keys(Cc)) {
+    if (!contract.startsWith(ABOUT_CONTRACT_PREFIX)) continue;
+    const name = contract.slice(ABOUT_CONTRACT_PREFIX.length);
+    if (!/^[a-z0-9-]+$/.test(name) || ABOUT_NOT_STANDALONE.has(name)) continue;
+    try {
+      const module = Cc[contract].getService(Ci.nsIAboutModule);
+      const flags = module.getURIFlags(Services.io.newURI(`about:${name}`));
+      if (flags & Ci.nsIAboutModule.HIDE_FROM_ABOUTABOUT) continue;
+      if (Services.policies && !Services.policies.isAllowed(`about:${name}`)) continue;
+    } catch {
+      continue; // module failed to load: don't offer it
+    }
+    names.push(name);
+  }
+  return names.sort();
+}
+
 // Delay before running another add-on's command: Thunderbird won't open an
 // add-on popup while the palette's own popup is still open, and the palette
 // closes right after the call returns.
@@ -314,6 +343,26 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
             throw new ExtensionError("Add-ons and Themes cannot be opened on this Thunderbird version");
           }
           win.openAddonsMgr();
+        },
+
+        async listAboutPages() {
+          return aboutPages();
+        },
+
+        async openAboutPage(name) {
+          if (!aboutPages().includes(name)) throw new ExtensionError(`Unknown about: page: ${name}`);
+          const win = getMainWindow();
+          if (!win) throw new ExtensionError("No Thunderbird main window available");
+          const url = `about:${name}`;
+          // Like Settings → Config Editor: switch to an open tab showing it,
+          // else open a content tab.
+          const tabmail = win.document.getElementById("tabmail");
+          const open = tabmail.tabInfo.find(t => t.browser?.currentURI?.spec?.split(/[?#]/)[0] === url);
+          if (open) {
+            tabmail.switchToTab(open);
+            return;
+          }
+          tabmail.openTab("contentTab", { url });
         },
 
         async listAddonCommands() {

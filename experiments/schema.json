@@ -85,6 +85,26 @@
         "parameters": []
       },
       {
+        "name": "listAboutPages",
+        "type": "function",
+        "async": true,
+        "description": "List the about: pages Thunderbird has registered (names without the about: prefix), as about:about shows them: internal pages and pages blocked by enterprise policy are left out.",
+        "parameters": []
+      },
+      {
+        "name": "openAboutPage",
+        "type": "function",
+        "async": true,
+        "description": "Open about:<name> in a tab, or switch to a tab already showing it. Only names returned by listAboutPages are accepted.",
+        "parameters": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Page name without the about: prefix, e.g. config."
+          }
+        ]
+      },
+      {
         "name": "listAddonCommands",
         "type": "function",
         "async": true,

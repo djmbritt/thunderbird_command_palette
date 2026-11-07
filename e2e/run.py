@@ -105,8 +105,17 @@ async function palette(op = "read", arg = null) {
 // commands (tags, unified folders) so the list is complete.
 async function openPalette() {
   await until(() => !paletteBrowser(), "a previous palette to close");
-  W().focus();
-  W().document.querySelector(`#ext-keyset-id-${EXT_ID.replace(/[^a-z0-9_-]/gi, "_")} > key`).doCommand();
+  // Press the shortcut; right after startup the first press can be missed,
+  // so press it again if the palette hasn't appeared.
+  for (let attempt = 1; !paletteBrowser(); attempt++) {
+    W().focus();
+    W().document.querySelector(`#ext-keyset-id-${EXT_ID.replace(/[^a-z0-9_-]/gi, "_")} > key`).doCommand();
+    try {
+      await until(paletteBrowser, "the palette to open", 4000);
+    } catch (e) {
+      if (attempt === 3) throw e;
+    }
+  }
   await until(async () => (await palette()).rows.some(r => r.label?.startsWith("Go to Tag:")), "the palette to finish loading");
   return palette();
 }
@@ -345,6 +354,29 @@ def open_addons_manager(tb):
         "an Add-ons and Themes tab");
       tabmail.closeTab(tab);
       tabmail.switchToTab(0);
+    """)
+
+
+@test
+def about_pages(tb):
+    return tb.js("""
+      await openPalette();
+      const listed = (await palette("type", "open about:")).rows.map(r => r.label).filter(l => l.startsWith("Open about:"));
+      paletteBrowser()?.closest("panel")?.hidePopup();
+      const tabmail = W().gTabmail;
+      const tabFor = url => tabmail.tabInfo.find(t => String(t.browser?.currentURI?.spec).startsWith(url));
+      for (const page of ["config", "support"]) {
+        await run(`about:${page}`, `Open about:${page}`);
+        await until(() => tabFor(`about:${page}`), `an about:${page} tab`);
+      }
+      // Running it again switches to the open tab instead of opening another.
+      const before = tabmail.tabInfo.length;
+      await run("about:config", "Open about:config");
+      await until(() => tabmail.currentTabInfo === tabFor("about:config"), "the about:config tab to be selected");
+      if (tabmail.tabInfo.length !== before) throw new Error("opened a second about:config tab");
+      for (const page of ["config", "support"]) tabmail.closeTab(tabFor(`about:${page}`));
+      tabmail.switchToTab(0);
+      return listed.length + " pages: " + listed.map(l => l.slice(5)).join(", ");
     """)
 
 
