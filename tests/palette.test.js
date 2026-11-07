@@ -62,7 +62,7 @@ function folder(id, name, extra = {}) {
 }
 
 // Load a fresh palette with the given selection. Returns helpers to drive it.
-async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { id: 1, windowId: 10, folderPaneVisible: true } } = {}) {
+async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "standard" } } = {}) {
   const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"] });
   const projects = folder("a1://Projects", "Projects");
   const savedSearch = folder("a1://Saved", "Saved Search", { isVirtual: true });
@@ -384,4 +384,55 @@ test("folder pane command is hidden outside a mail tab", async () => {
   const p = await loadPalette({ selected: [], mailTab: null });
   p.type("folder pane");
   assert.ok(!p.labels().some(l => l.endsWith("Folder Pane")));
+});
+
+test("message pane command hides a visible message pane", async () => {
+  const p = await loadPalette({ selected: [] });
+  p.type("message pane");
+  assert.equal(p.labels()[0], "Hide Message Pane");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { messagePaneVisible: false }]]);
+});
+
+test("message pane command shows a hidden message pane", async () => {
+  const p = await loadPalette({
+    selected: [],
+    mailTab: { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: false, layout: "standard" }
+  });
+  p.type("preview");
+  assert.equal(p.labels()[0], "Show Message Pane");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { messagePaneVisible: true }]]);
+});
+
+test("layout commands list all three layouts and mark the current one", async () => {
+  const p = await loadPalette({
+    selected: [],
+    mailTab: { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "wide" }
+  });
+  p.type("layout");
+  const rows = p.els.results.children.map(li => ({
+    label: li.children[1].textContent,
+    hint: li.children[2]?.textContent
+  })).filter(r => r.label.startsWith("Layout:"));
+  assert.deepEqual(rows.map(r => r.label).sort(), ["Layout: Classic View", "Layout: Vertical View", "Layout: Wide View"]);
+  assert.equal(rows.find(r => r.label === "Layout: Wide View").hint, "current");
+  assert.equal(rows.filter(r => r.hint === "current").length, 1);
+});
+
+test("choosing a layout updates the mail tab", async () => {
+  const p = await loadPalette({ selected: [] });
+  p.type("vertical");
+  assert.equal(p.labels()[0], "Layout: Vertical View");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { layout: "vertical" }]]);
+});
+
+test("pane and layout commands are hidden outside a mail tab", async () => {
+  const p = await loadPalette({ selected: [], mailTab: null });
+  p.type("");
+  assert.ok(!p.labels().some(l => l.includes("Message Pane") || l.startsWith("Layout:")));
 });

@@ -33,7 +33,7 @@ Flow:
 - Both return paginated `MessageList`s; `collectMessages()` follows `messages.continueList` so large selections are handled fully.
 - `ctx.windowId` is recorded so `switchToFolder` navigates the originating window rather than an arbitrary one.
 
-Actions with `requires: "message"` are hidden when no message is selected/displayed. Actions with `requires: "mailTab"` (e.g. the folder pane toggle) are hidden when the palette wasn't opened from a 3-pane mail tab. A `label` may be a getter (`get label() {…}`) to reflect state captured in `ctx`, e.g. "Hide/Show Folder Pane". Don't copy commands with object spread, which would freeze the getter.
+Actions with `requires: "message"` are hidden when no message is selected/displayed. Actions with `requires: "mailTab"` (e.g. the folder pane toggle) are hidden when the palette wasn't opened from a 3-pane mail tab. A `label` or `hint` may be a getter (`get label() {…}`) to reflect state captured in `ctx`, e.g. "Hide/Show Folder Pane", or the `current` hint on the active `Layout: …` command (the `LAYOUTS` table maps mailTabs `layout` values standard/wide/vertical to Thunderbird's menu names). Don't copy commands with object spread, which would freeze the getter.
 
 ### MRU ordering
 
@@ -82,6 +82,16 @@ experiments/schema.json    Declares the `messenger.palette.*` API surface.
 experiments/implementation.js  Privileged code. Wraps Thunderbird internals (goDoCommand, MailServices) for actions MV3 can't reach.
 package.sh                 Builds ../command-palette-<version>.xpi.
 ```
+
+### Ranking
+
+`filterCommands` takes the best of several scores per command:
+1. fuzzy score of the full label;
+2. fuzzy score of just the folder name (`nameStart`);
+3. fuzzy score of `label + hint + keywords` (positions clipped to the label);
+4. **whole-word prefix hits**. If the query is a prefix of a single word, that word is scored as if it stood alone, at full weight for label words and `KEYWORD_WEIGHT` (0.9) for hint/keyword words. Without this, long labels and keyword-only matches lose to scattered letter matches because of the length penalty. For example, "delete" would rank "Go to: Unified Trash" (keyword "deleted") over "Delete (Move to Trash)".
+
+Plus the MRU tie-breaker. Equal scores keep insertion order: static → experiment → unified → folders.
 
 ## Folder rendering
 

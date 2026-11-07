@@ -160,6 +160,13 @@ function updateSelected(props) {
   return Promise.all(ctx.selectedMessages.map(m => messenger.messages.update(m.id, props)));
 }
 
+// mailTabs `layout` values, named as in Thunderbird's View → Layout menu.
+const LAYOUTS = [
+  { layout: "standard", name: "Classic View", icon: "⊟" },
+  { layout: "wide", name: "Wide View", icon: "☰" },
+  { layout: "vertical", name: "Vertical View", icon: "◫" }
+];
+
 const STATIC_ACTIONS = [
   {
     id: "compose-new",
@@ -291,7 +298,32 @@ const STATIC_ACTIONS = [
     run: () => messenger.mailTabs.update(ctx.mailTab.id, {
       folderPaneVisible: ctx.mailTab.folderPaneVisible === false
     })
-  }
+  },
+  {
+    id: "toggle-message-pane",
+    get label() {
+      return ctx.mailTab?.messagePaneVisible === false ? "Show Message Pane" : "Hide Message Pane";
+    },
+    icon: "⬓",
+    keywords: "toggle message pane preview reading pane layout view",
+    requires: "mailTab",
+    run: () => messenger.mailTabs.update(ctx.mailTab.id, {
+      messagePaneVisible: ctx.mailTab.messagePaneVisible === false
+    })
+  },
+  ...LAYOUTS.map(({ layout, name, icon }) => ({
+    id: `layout-${layout}`,
+    label: `Layout: ${name}`,
+    // Mark the active layout rather than hiding it, so all three are always
+    // findable and the user can see which one is in use.
+    get hint() {
+      return ctx.mailTab?.layout === layout ? "current" : undefined;
+    },
+    icon,
+    keywords: `view layout pane ${layout}`,
+    requires: "mailTab",
+    run: () => messenger.mailTabs.update(ctx.mailTab.id, { layout })
+  }))
 ];
 
 async function emptyTrashAllAccounts() {
@@ -535,6 +567,9 @@ async function switchToFolder(folder, { retryProps } = {}) {
   }
 }
 
+// Discount for matches that only hit a hidden keyword or the hint.
+const KEYWORD_WEIGHT = 0.9;
+
 function filterCommands(query) {
   const haveMessage = ctx.selectedMessages.length > 0;
   const isEmpty = !query;
@@ -569,6 +604,19 @@ function filterCommands(query) {
       }
     }
 
+    // Whole-word prefix hits in the label ("delete" → "Delete (Move to
+    // Trash)") are scored as if the word stood alone, so long labels aren't
+    // penalised for their length when the user typed one of their words.
+    const lowerQuery = query.toLowerCase();
+    for (const m of cmd.label.toLowerCase().matchAll(/[^\s:()·/]+/g)) {
+      if (!m[0].startsWith(lowerQuery)) continue;
+      const wordScore = Fuzzy.score(query, m[0]).score;
+      if (wordScore > bestScore) {
+        bestScore = wordScore;
+        positions = Array.from({ length: lowerQuery.length }, (_, k) => m.index + k);
+      }
+    }
+
     const hintAndKeywords = [cmd.hint, cmd.keywords].filter(Boolean).join(" ");
     if (hintAndKeywords) {
       const altResult = Fuzzy.score(query, `${cmd.label} ${hintAndKeywords}`);
@@ -576,6 +624,19 @@ function filterCommands(query) {
         bestScore = altResult.score;
         // Keep only the positions that fall within the visible label.
         positions = altResult.positions.filter(p => p < cmd.label.length);
+      }
+
+      // Whole-word hits on a hint/keyword ("preview" → "preview" keyword)
+      // would otherwise be drowned by the length penalty on the combined
+      // string above, losing to scattered letter matches in other commands.
+      // Score the word on its own, discounted so label matches win ties.
+      for (const word of hintAndKeywords.toLowerCase().split(/\s+/)) {
+        if (!word.startsWith(lowerQuery)) continue;
+        const wordScore = Fuzzy.score(query, word).score * KEYWORD_WEIGHT;
+        if (wordScore > bestScore) {
+          bestScore = wordScore;
+          positions = []; // the match isn't in the visible label
+        }
       }
     }
 
