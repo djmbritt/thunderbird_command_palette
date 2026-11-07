@@ -33,7 +33,7 @@ Flow:
 - Both return paginated `MessageList`s; `collectMessages()` follows `messages.continueList` so large selections are handled fully.
 - `ctx.windowId` is recorded so `switchToFolder` navigates the originating window rather than an arbitrary one.
 
-Actions with `requires: "message"` are hidden when no message is selected/displayed.
+Actions with `requires: "message"` are hidden when no message is selected/displayed. Actions with `requires: "mailTab"` (e.g. the folder pane toggle) are hidden when the palette wasn't opened from a 3-pane mail tab. A `label` may be a getter (`get label() {…}`) to reflect state captured in `ctx`, e.g. "Hide/Show Folder Pane". Don't copy commands with object spread, which would freeze the getter.
 
 ### MRU ordering
 
@@ -131,7 +131,8 @@ Append to `STATIC_ACTIONS` in `popup/palette.js`:
   icon: "✎",                        // single-char glyph in the row
   hint: "optional right-side hint", // visible (dim) + fuzzy-matched (no highlight)
   keywords: "hidden search terms",  // fuzzy-matched only, never displayed
-  requires: "message",              // optional gate; hidden when no message selected/displayed
+  requires: "message",              // optional gate: "message" = hidden when no message selected/displayed,
+                                    //   "mailTab" = hidden when not opened from a 3-pane mail tab
   destructive: true,                // optional; two-step confirm + excluded from MRU
   picker: () => ({ title, empty, items }), // optional; opens a sub-list instead of `run` (see Picker mode)
   run: async () => { /* messenger.* calls; use ctx.selectedMessages */ }

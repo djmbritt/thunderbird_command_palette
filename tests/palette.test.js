@@ -62,7 +62,7 @@ function folder(id, name, extra = {}) {
 }
 
 // Load a fresh palette with the given selection. Returns helpers to drive it.
-async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdate, extraFolders = [] } = {}) {
+async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { id: 1, windowId: 10, folderPaneVisible: true } } = {}) {
   const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"] });
   const projects = folder("a1://Projects", "Projects");
   const savedSearch = folder("a1://Saved", "Saved Search", { isVirtual: true });
@@ -93,7 +93,8 @@ async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdat
       getUnifiedFolder: typeof unified === "function" ? unified : async (type) => unified[type] ?? null
     },
     mailTabs: {
-      query: async () => [{ id: 1, windowId: 10 }],
+      // `mailTab: null` simulates opening the palette from a non-mail tab.
+      query: async () => (mailTab ? [mailTab] : []),
       update: async (...args) => {
         calls.push(plain(["mailTabs.update", ...args]));
         if (mailTabsUpdate) await mailTabsUpdate(...args);
@@ -359,4 +360,28 @@ test("one failing unified type doesn't hide the others", async () => {
   });
   p.type("");
   assert.equal(p.labels().filter(l => l.startsWith("Go to: Unified")).length, 3);
+});
+
+test("folder pane command hides a visible folder pane", async () => {
+  const p = await loadPalette({ selected: [] });
+  p.type("folder pane");
+  assert.equal(p.labels()[0], "Hide Folder Pane");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { folderPaneVisible: false }]]);
+});
+
+test("folder pane command shows a hidden folder pane", async () => {
+  const p = await loadPalette({ selected: [], mailTab: { id: 1, windowId: 10, folderPaneVisible: false } });
+  p.type("toggle folder");
+  assert.equal(p.labels()[0], "Show Folder Pane");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { folderPaneVisible: true }]]);
+});
+
+test("folder pane command is hidden outside a mail tab", async () => {
+  const p = await loadPalette({ selected: [], mailTab: null });
+  p.type("folder pane");
+  assert.ok(!p.labels().some(l => l.endsWith("Folder Pane")));
 });

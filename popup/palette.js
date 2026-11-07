@@ -278,6 +278,19 @@ const STATIC_ACTIONS = [
     label: "Open Address Book",
     icon: "☰",
     run: () => messenger.addressBooks.openUI()
+  },
+  {
+    id: "toggle-folder-pane",
+    // Label reflects the current state (captured when the palette opened).
+    get label() {
+      return ctx.mailTab?.folderPaneVisible === false ? "Show Folder Pane" : "Hide Folder Pane";
+    },
+    icon: "◧",
+    keywords: "toggle folder pane sidebar layout view",
+    requires: "mailTab",
+    run: () => messenger.mailTabs.update(ctx.mailTab.id, {
+      folderPaneVisible: ctx.mailTab.folderPaneVisible === false
+    })
   }
 ];
 
@@ -529,6 +542,7 @@ function filterCommands(query) {
 
   for (const cmd of (picker ? picker.items : commands)) {
     if (cmd.requires === "message" && !haveMessage) continue;
+    if (cmd.requires === "mailTab" && !ctx.mailTab) continue;
     const cmdId = cmd.id || cmd.label;
 
     if (isEmpty) {
