@@ -139,6 +139,8 @@ experiments/schema.json        Declares the messenger.palette.* API surface.
 experiments/implementation.js  Privileged code wrapping Thunderbird internals.
 icons/icon.svg                 Extension and toolbar icon.
 package.sh                     Builds ../command-palette-<version>.xpi.
+PRIVACY.md                     Privacy policy (shipped; pasted into the ATN listing).
+store/LISTING.md               ATN listing text and notes to reviewer (dev-only, not shipped).
 ```
 
 ### Per-action shortcuts
@@ -297,9 +299,9 @@ Steps recorded: the parallel setup calls, each command source (named `<file>#<n>
 
 ## Packaging
 
-Run `./package.sh`. It reads the version from `manifest.json` and writes `../command-palette-<version>.xpi` (outside the project so builds never nest), excluding `.git*`, `.claude/`, `CLAUDE.md`, `package.sh`, `tests/`, `tools/`, `types/`, `package*.json`, `tsconfig*.json`, `node_modules/`, and stray `.xpi`/`build`/`dist` files. Add any new dev-only files to its `-x` list.
+Run `./package.sh`. It reads the version from `manifest.json` and writes `../command-palette-<version>.xpi` (outside the project so builds never nest), excluding `.git*`, `.claude/`, `CLAUDE.md`, `package.sh`, `tests/`, `store/`, `tools/`, `types/`, `package*.json`, `tsconfig*.json`, `node_modules/`, and stray `.xpi`/`build`/`dist` files. Add any new dev-only files to its `-x` list.
 
-For ATN submission: code must not be minified or obfuscated. The extension id in `browser_specific_settings.gecko.id` is immutable once published.
+For ATN submission: code must not be minified or obfuscated. The extension id in `browser_specific_settings.gecko.id` (`command-palette@djmbritt.github.io`) is immutable once published. `store/LISTING.md` holds the listing text (summary, description) and the notes to reviewer, including why each experiment function is needed (ATN rejects experiments that duplicate a built-in API); `PRIVACY.md` is the privacy policy, pasted in full into the listing. Update both when features, permissions, stored data or the experiment change. Add-ons with experiments, or that read messages or contacts, always get a manual review.
 
 ## API reference quick links
 

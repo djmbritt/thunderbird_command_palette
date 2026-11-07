@@ -70,7 +70,7 @@ This builds `../command-palette-<version>.xpi`. Install it via **Add-ons and The
 
 ## Permissions
 
-The add-on asks for access to your accounts, folders, messages, tags, address books, compose windows and tabs, plus storage and notifications. It only uses them to carry out the commands you run. The add-on has no network access of its own and sends no data anywhere.
+The add-on asks for access to your accounts, folders, messages, tags, address books, compose windows and tabs, plus storage and notifications. It only uses them to carry out the commands you run. The add-on has no network access of its own and sends no data anywhere. See the [privacy policy](PRIVACY.md).
 
 Some commands (Undo, Print, Today pane, Calendar/Tasks/Chat, Get New Mail, Settings) need Thunderbird features that add-ons can't normally reach. They're provided by a small privileged "experiment" in `experiments/` that only allows a fixed list of actions. If it can't load, those commands are hidden and everything else still works.
 
@@ -92,3 +92,5 @@ After loading the add-on temporarily, click **Reload** on the Debug Add-ons page
 - [x] add an icon
 - [ ] verify in Thunderbird: Filter: Clear, Write to…, Calendar/Tasks/Chat, Today pane, Undo, Print, View Source, and the extra shortcuts
 - [ ] check that Undo can undo moves made from the palette
+- [ ] check that Go to Tag works (the first try failed with "not viewable in any of the enabled folder modes")
+- [ ] publish on addons.thunderbird.net: take the screenshots listed in `store/LISTING.md`, choose the release version, submit

@@ -23,6 +23,7 @@ zip -r -FS "${OUT_PATH}" . \
      "CLAUDE.md" \
      "package.sh" \
      "tests/*" \
+     "store/*" \
      "tools/*" \
      "types/*" \
      "package.json" \
