@@ -29,51 +29,8 @@ function buildFolderCommands(entries) {
     icon: e.icon,
     keywords: e.keywords,
     kind: "folder",
-    // Filled in by loadUnreadCounts() after the first render.
-    get badge() {
-      return e.unread > 0 ? String(e.unread) : undefined;
-    },
     run: () => switchToFolder(e.folder)
   }));
-}
-
-// Unread counts for the "Go to:" badges. Loaded after the palette is visible
-// (onAfterFirstPaint), a few calls at a time so they don't crowd out other
-// API calls, and filled into the rendered rows in place (refreshBadges) as
-// they arrive. Capped to keep it cheap.
-const UNREAD_COUNT_LIMIT = 500;
-const UNREAD_COUNT_CONCURRENCY = 4;
-
-async function loadUnreadCounts(entries) {
-  if (typeof messenger.folders?.getFolderInfo !== "function") return;
-  if (debugSettings.skipUnreadCounts) {
-    Timing.set("unreadCountsSkipped", 1);
-    return;
-  }
-  let slowest = 0;
-  // Saved searches are skipped: counting them re-runs the search.
-  const queue = entries.slice(0, UNREAD_COUNT_LIMIT).filter(e => !e.folder.isVirtual);
-  let sinceRefresh = 0;
-  async function worker() {
-    while (queue.length > 0) {
-      const e = queue.shift();
-      const start = performance.now();
-      try {
-        e.unread = (await messenger.folders.getFolderInfo(e.folder.id)).unreadMessageCount || 0;
-      } catch {
-        // Folder may be gone or unavailable (offline IMAP); leave it blank.
-      }
-      Timing.count("unreadCountCalls");
-      slowest = Math.max(slowest, performance.now() - start);
-      if (e.unread && ++sinceRefresh >= 8) {
-        sinceRefresh = 0;
-        refreshBadges();
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: UNREAD_COUNT_CONCURRENCY }, worker));
-  refreshBadges();
-  Timing.set("unreadCountSlowestCallMs", Math.round(slowest));
 }
 
 // Actions on the folder shown in the current mail tab.
@@ -163,8 +120,3 @@ registerCommands(() => [
 registerCommands(() => buildUnifiedCommands(), { deferred: true });
 registerCommands(() => currentFolderCommands().filter(() => displayedFolder()));
 registerCommands(() => buildFolderCommands(folderEntries));
-
-onAfterFirstPaint(() => {
-  Timing.time("unread counts (after paint)", loadUnreadCounts(folderEntries))
-    .then(() => Timing.reportLate("unread counts (after paint)"));
-});

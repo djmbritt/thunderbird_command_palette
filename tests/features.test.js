@@ -66,7 +66,7 @@ test("View: Threaded sets groupType and the current one is marked", async () => 
   assert.deepEqual(p.calls, [["mailTabs.update", 1, { groupType: "groupedByThread" }]]);
 });
 
-// ---- Folder actions and unread badges --------------------------------------
+// ---- Folder actions ---------------------------------------------------------
 
 const displayed = { id: "a1://INBOX", name: "Inbox", isFavorite: false };
 
@@ -100,18 +100,6 @@ test("folder actions are hidden when no folder is displayed", async () => {
   const p = await loadPalette({ selected: [], mailTab: { id: 1, windowId: 10 } });
   p.type("mark folder");
   assert.ok(!p.labels().includes("Mark Folder as Read"));
-});
-
-test("Go to: rows show unread counts once they load", async () => {
-  const p = await loadPalette({
-    selected: [],
-    api: { folders: { getFolderInfo: async (id) => ({ unreadMessageCount: id === "a1://INBOX" ? 12 : 0 }) } }
-  });
-  await settle();
-  p.type("go to");
-  const labels = p.labels();
-  assert.equal(p.badges()[labels.indexOf("Go to: Inbox")], "12");
-  assert.equal(p.badges()[labels.indexOf("Go to: Projects")], undefined, "zero unread shows no badge");
 });
 
 // ---- Messages: open in tab/window, notifications ---------------------------
@@ -519,22 +507,6 @@ test("each open saves a startup timing run with named steps and counts", async (
   assert.ok(run.counts.commands > 0);
 });
 
-test("unread counts are timed, and can be switched off for comparison", async () => {
-  const infoCalls = [];
-  const api = { folders: { getFolderInfo: async (id) => { infoCalls.push(id); return { unreadMessageCount: 1 }; } } };
-  const on = await loadPalette({ selected: [], api });
-  await until(() => on.store.startupTimings?.[0]?.steps["unread counts (after paint)"]);
-  assert.ok(infoCalls.length > 0);
-  assert.ok(on.store.startupTimings[0].steps["unread counts (after paint)"]);
-  assert.equal(on.store.startupTimings[0].counts.unreadCountCalls, infoCalls.length);
-
-  infoCalls.length = 0;
-  const off = await loadPalette({ selected: [], api, initialStore: { debug: { skipUnreadCounts: true } } });
-  await until(() => off.store.startupTimings?.[0]?.steps["unread counts (after paint)"]);
-  assert.equal(infoCalls.length, 0);
-  assert.equal(off.store.startupTimings[0].counts.unreadCountsSkipped, 1);
-});
-
 test("Debug: Copy Startup Timings copies a readable summary", async () => {
   let copied = null;
   const p = await loadPalette({ selected: [] });
@@ -604,20 +576,6 @@ test("a row the user picked stays selected when deferred commands arrive", async
   release();
   await until(() => p.labels()[0] === "Go to: Unified Inbox");
   assert.equal(p.selectedLabel(), "Layout: Vertical View");
-});
-
-test("unread badges are filled in place without rebuilding the rows", async () => {
-  let release;
-  const gate = new Promise(r => { release = r; });
-  const p = await loadPalette({
-    selected: [],
-    api: { folders: { getFolderInfo: async (id) => { await gate; return { unreadMessageCount: id === "a1://INBOX" ? 5 : 0 }; } } }
-  });
-  p.type("go to: inbox");
-  const rowsBefore = [...p.els.results.children];
-  release();
-  await until(() => p.badges().includes("5"));
-  assert.deepEqual([...p.els.results.children], rowsBefore, "same row elements");
 });
 
 test("a queued Enter is cancelled by typing, and gives up waiting after a second", async () => {

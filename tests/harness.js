@@ -7,6 +7,7 @@
 //              (record) => ({...}) to build stubs that record their calls
 //   activeTab  tab returned by tabs.query (type "messageCompose" = compose)
 //   initialStore  storage.local contents at start (e.g. { mru: [...] })
+//   initialLocalStorage  window.localStorage contents at start (e.g. { uiFontSize: "18" })
 //   pending    action returned to the popup's "palette:takePending" request
 //   selected, palette, unified, junkFolders, mailTab, mailTabsUpdate,
 //   extraFolders — see defaults below.
@@ -74,7 +75,7 @@ function folder(id, name, extra = {}) {
 }
 
 // Load a fresh palette with the given selection. Returns helpers to drive it.
-async function loadPalette({ initialStore = {}, api = {}, activeTab = { id: 1, windowId: 10, type: "mail" }, pending = null, selected, palette, junkFolders = JUNK_FOLDERS, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "standard" } } = {}) {
+async function loadPalette({ initialLocalStorage = {}, initialStore = {}, api = {}, activeTab = { id: 1, windowId: 10, type: "mail" }, pending = null, selected, palette, junkFolders = JUNK_FOLDERS, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "standard" } } = {}) {
   const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"], accountId: "a1" });
   const projects = folder("a1://Projects", "Projects", { accountId: "a1" });
   const savedSearch = folder("a1://Saved", "Saved Search", { isVirtual: true });
@@ -146,8 +147,16 @@ async function loadPalette({ initialStore = {}, api = {}, activeTab = { id: 1, w
   const state = { closed: false };
   const documentElement = { style: {} };
 
+  // Synchronous page storage (used by popup/early.js for the font-size cache).
+  const local = new Map(Object.entries(initialLocalStorage));
+  const localStorage = {
+    getItem: (k) => (local.has(k) ? local.get(k) : null),
+    setItem: (k, v) => { local.set(k, String(v)); },
+    removeItem: (k) => { local.delete(k); }
+  };
   const context = vm.createContext({
     performance,
+    localStorage,
     console: { ...console, log() {}, warn() {} }, // keep test output clean
     messenger,
     window: { close() { state.closed = true; } },
@@ -170,8 +179,7 @@ async function loadPalette({ initialStore = {}, api = {}, activeTab = { id: 1, w
   const selectedLabel = () => rowText(els.results.children.find(li => li.classList.contains("selected")));
 
   const hints = () => els.results.children.map(li => li.children.find(c => c.className === "row-hint")?.textContent);
-  const badges = () => els.results.children.map(li => li.children.find(c => c.className === "row-badge")?.textContent || undefined);
-  return { context, els, calls, store, state, documentElement, key, type, labels, hints, badges, selectedLabel };
+  return { context, els, calls, store, local, state, documentElement, key, type, labels, hints, selectedLabel };
 }
 
 const unifiedFolder = (type) => ({ id: `unified-${type}-id`, name: type, isUnified: true, specialUse: [type] });

@@ -21,22 +21,23 @@ The palette is an **`action` popup** (toolbar-button dropdown). The main shortcu
 Flow:
 1. User presses the shortcut → Thunderbird opens `popup/palette.html` as the action popup.
 2. `palette.html` loads `lib/*.js`, then the core `popup/palette.js`, then each `popup/commands/*.js` file (each calls `registerCommands`), then `popup/main.js`, which calls `init()`.
-3. `init()` (in parallel) loads MRU history, lists accounts with folders, captures context, applies the UI font size, and asks the background for a pending shortcut action. It builds the commands from the **immediate** sources, renders the first rows, and waits for the first paint. Only then does it run the **deferred** sources (unified folders, tags) and after-paint hooks (unread counts). See **Startup order**.
+3. `init()` (in parallel) loads MRU history, lists accounts with folders, captures context, applies the UI font size, and asks the background for a pending shortcut action. It builds the commands from the **immediate** sources, renders the first rows, and waits for the first paint. Only then does it run the **deferred** sources (unified folders, tags). See **Startup order**.
 4. Each keystroke re-scores commands via `lib/fuzzy.js` (or runs a message search for `?`).
 5. Enter / click → run the action, then `window.close()`. Esc → close without running.
 
 ### Command registry
 
-Command groups live in `popup/commands/*.js` and call `registerCommands(source, { deferred? })` at load time. `source({ accounts })` returns, or resolves to, an array of commands. Sources run in registration order, which is the `<script>` order in `palette.html` and also the tie-break order for equal scores (compose → messages → tags → view → thunderbird → navigation → folders). A source that throws is logged and skipped. Mark a source `{ deferred: true }` if it needs slow API round trips and isn't required for the first screen. Its commands are merged in at its registration position after the first paint. Use `onAfterFirstPaint(fn)` for work that only decorates rows (e.g. unread counts).
+Command groups live in `popup/commands/*.js` and call `registerCommands(source, { deferred? })` at load time. `source({ accounts })` returns, or resolves to, an array of commands. Sources run in registration order, which is the `<script>` order in `palette.html` and also the tie-break order for equal scores (compose → messages → tags → view → thunderbird → navigation → folders). A source that throws is logged and skipped. Mark a source `{ deferred: true }` if it needs slow API round trips and isn't required for the first screen. Its commands are merged in at its registration position after the first paint.
 
 ### Startup order
 
-Measured startup (see **Measuring startup**) showed that most of the time to visible was spent *after* our code finished, before the first paint, and that the second full render triggered by unread counts landed before that paint. So `init()` is ordered for time-to-visible:
+Measured startup (see **Measuring startup**) showed that most of the time to visible was spent *after* our code finished, before the first paint. Our own work is ~30–60 ms per open; the rest is Thunderbird creating and showing the panel (the first paint coincides with the popup's `focus` event). So `init()` is ordered for time-to-visible:
 1. Parallel setup calls (MRU, accounts, context, font size, pending shortcut).
 2. Immediate sources → filter → `render({ firstChunk: true })` builds only the first `FIRST_CHUNK_ROWS` (30) rows. The rest are appended right after the paint, and a newer render cancels that append (`renderToken`). `select()` calls `ensureRendered()` so arrowing past the first chunk works.
 3. Wait for the first paint (`afterNextPaint`: rAF, then a timeout).
 4. Deferred sources → `applyDeferredCommands`, which keeps the query, keeps a row the user explicitly chose (`selectionTouched`), and otherwise re-selects the new top.
-5. After-paint hooks: unread counts, 4 calls at a time, written into the existing rows by `refreshBadges()` without re-rendering.
+
+**Unread counts were removed** (they used one `folders.getFolderInfo` per folder, competed with startup calls, and re-rendered before the first paint). If they come back, load them after the first paint and update rows in place rather than re-rendering.
 
 **Early Enter.** An Enter pressed before deferred commands arrive, with no explicit selection, is queued (`queueEnter`) and run after the merge. A reflexive Ctrl+Shift+P → Enter therefore runs the true top MRU entry even when that's a deferred command such as Go to: Unified Inbox. Typing or moving the selection cancels the queued Enter. It gives up waiting after 1 s (`QUEUED_ENTER_MAX_WAIT_MS`). Shortcut-launched actions also run after the merge, so they can target deferred commands (`tag-with`). Shared helpers stay in the core: `ctx`, `updateSelected`, `selectionText`, `firstSelectedId`, `switchToFolder`, `destinationItems`, `specialIcon`, `folderEntries`, `notify`, `mailbox`.
 
@@ -61,7 +62,7 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 
 ### Rendering
 
-`render()` rebuilds the list only when the filtered set changes (`refilter`) or when deferred commands are merged. Unread counts don't re-render; they update `badgeEls` in place. Every row has a `.row-badge` span, hidden by CSS while empty. Selection changes (arrows, hover) go through `select(i)`, which repaints just the old and new rows via `paintRow`. Hover selection uses `mousemove`, not `mouseenter`, so rows scrolling under a stationary pointer during keyboard navigation don't steal the selection. The input is an ARIA combobox: `aria-activedescendant` points at the selected `opt-<i>` row. Optional row decorations: `badge` (count pill on the far right, e.g. unread) and `iconColor` (e.g. tag colour).
+`render()` rebuilds the list only when the filtered set changes (`refilter`) or when deferred commands are merged. Selection changes (arrows, hover) go through `select(i)`, which repaints just the old and new rows via `paintRow`. Hover selection uses `mousemove`, not `mouseenter`, so rows scrolling under a stationary pointer during keyboard navigation don't steal the selection. The input is an ARIA combobox: `aria-activedescendant` points at the selected `opt-<i>` row. Optional row decoration: `iconColor` (e.g. tag colour).
 
 ### Query prefixes and message search
 
@@ -75,7 +76,10 @@ Search is provided by `popup/commands/search.js` via `registerMessageSearch(fn)`
 
 ### Styling
 
-**Font size follows Thunderbird.** Every text size, padding and the popup's width/height are in `rem`. On init, `applyUIFontSize()` sets `<html>` font-size from `messenger.palette.getUIFontSize()` (accepted range 8–40px), before the first render so the popup doesn't jump. Without the experiment the CSS fallback `html { font-size: 15px }` applies. Design base is 15px = 1rem, so a 12px design value is `0.8rem`. Keep borders, radii and accent bars in px. Popup size is `min(40rem, 800px)` × `min(26.67rem, 600px)`. Gecko caps popup size near 800×600.
+**Font size follows Thunderbird.** Every text size, padding and the popup's width/height are in `rem`. Because the popup's size depends on the root font size, it must be right at the *first* layout; a later change resizes the popup after Thunderbird has measured it.
+- `popup/early.js` runs in `<head>`, before the body is laid out. It applies the size cached in `localStorage.uiFontSize` from the previous open (synchronous, accepted range 8–40px).
+- `applyUIFontSize()` then asks `messenger.palette.getUIFontSize()` and only touches the page and the cache if the size has changed. Timings record `fontSizeCachedPx`, `fontSizeActualPx`, and `fontSizeChangedAfterLoad`.
+- Without the experiment, or on the very first open, the CSS fallback `html { font-size: 15px }` applies. Design base is 15px = 1rem, so a 12px design value is `0.8rem`. Keep borders, radii and accent bars in px. Popup size is `min(40rem, 800px)` × `min(26.67rem, 600px)`. Gecko caps popup size near 800×600.
 
 All colours are CSS variables on `:root`, with a `@media (prefers-color-scheme: dark)` override block — extension pages follow the Thunderbird/system theme. Add new colours to **both** blocks. Use `scrollbar-width`/`scrollbar-color` (Gecko), not `::-webkit-scrollbar`.
 
@@ -103,7 +107,8 @@ Mark any new irreversible action `destructive: true`.
 manifest.json                  MV3 manifest: shortcuts (_execute_action + per-action commands), permissions, experiment API.
 background.js                  Per-action shortcuts: opens the popup and hands it the requested action.
 popup/palette.html             Picker banner, search field, result list; <script> order defines load and tie-break order.
-popup/palette.css              Thunderbird-native theme (light + dark), rem-based sizing, .confirm and .row-badge styles.
+popup/palette.css              Thunderbird-native theme (light + dark), rem-based sizing, .confirm style.
+popup/early.js                 Runs in <head>: applies the cached UI font size before first layout.
 popup/palette.js               Core: ctx capture, MRU, helpers, command registry, matching + prefixes, search hook, render, pickers, pending shortcut actions.
 popup/main.js                  Calls init(); must be the last script.
 popup/timing.js                Startup timing instrumentation (see Measuring startup); loaded before palette.js.
@@ -113,7 +118,7 @@ popup/commands/tags.js         Tag with…, Remove All Tags, Go to Tag: X.
 popup/commands/view.js         Quick filters, Sort by…, Reverse Sort, View: Threaded/Unthreaded/Grouped, panes, layouts.
 popup/commands/thunderbird.js  Experiment-backed: Undo/Redo, Compact, Expand/Collapse Threads, Print, View Source, Today Pane, Get Mail, Settings; Configure Keyboard Shortcuts; Address Book.
 popup/commands/navigation.js   Switch to Tab…, Write to… (contacts), Open Calendar/Tasks/Chat.
-popup/commands/folders.js      Mark Folder as Read, Favorites toggle, Empty Trash, Go to: Unified …, Go to: <folder> with unread badges.
+popup/commands/folders.js      Mark Folder as Read, Favorites toggle, Empty Trash, Go to: Unified …, Go to: <folder>.
 popup/commands/search.js       "?" message search provider.
 lib/fuzzy.js                   Subsequence scorer + highlight(). Loads in the popup (window.Fuzzy) and Node (module.exports).
 lib/vcard.js                   Minimal vCard reader (FN/N + EMAIL) for contacts. Popup (window.VCard) and Node.
@@ -151,8 +156,6 @@ Plus the MRU tie-breaker. Equal scores keep registration order (see **Command re
 Folders are added as `Go to: <name>` (`kind: "folder"`) with the breadcrumb (`<account> · <parent path>`) in the dim hint. Account roots and unified folders are skipped (roots aren't navigable; unified folders are handled separately, see below). Fuzzy matching scores against label + hint + extra keywords (account name, full path, special-use tags), but highlights only render on the visible label so they stay visually aligned. Folder commands also set `nameStart` (where the name begins in the label); the name is scored on its own too, so typing `inbox` gets the prefix bonus on `Inbox` instead of competing with the `Go to: ` prefix.
 
 **Unified folders.** `buildUnifiedCommands()` adds `Go to: Unified <Inbox|Drafts|Sent|Archives|Templates|Junk|Trash>` (the `UNIFIED_TYPES` list) via `messenger.folders.getUnifiedFolder(type)` (TB 127+, needs only `accountsRead`). Types are fetched in parallel. A type that returns nothing or throws is skipped without hiding the others. Unified folders have no `accountId` and aren't in account trees. Their ids are only valid for the session, so command ids are the fixed `goto-unified-<type>` (for MRU). Each runs `switchToFolder(folder, { retryProps: { folderMode: "unified" } })`. If the plain `displayedFolderId` update is rejected, for example because the folder pane isn't in unified mode, it retries with `folderMode: "unified"`, which switches the folder pane to the unified view.
-
-**Unread badges.** After the first paint (`onAfterFirstPaint`), `loadUnreadCounts` calls `folders.getFolderInfo` for up to 500 folders (skipping saved searches), 4 at a time. It writes counts into the rendered rows via `refreshBadges()` every few non-zero results and at the end. Zero shows no badge.
 
 **Current-folder actions.** "Mark Folder as Read" (`folders.markAsRead`) and "Add/Remove Folder from Favorites" (`folders.update({isFavorite})`) act on `ctx.mailTab.displayedFolder`, and are hidden when there isn't one. Both need `accountsFolders`.
 
@@ -207,7 +210,6 @@ Add it to the relevant `popup/commands/*.js` file's `registerCommands(...)` list
   icon: "✎",                        // single-char glyph in the row
   iconColor: "#FF0000",             // optional icon colour (e.g. tag colour)
   hint: "optional right-side hint", // visible (dim) + fuzzy-matched (no highlight); may be a getter
-  badge: "12",                      // optional count pill; may be a getter
   keywords: "hidden search terms",  // fuzzy-matched only, never displayed
   kind: "folder",                   // optional: "folder" / "tag" for the @ / # prefixes
   requires: "message",              // optional gate: "message" | "mailTab" | "compose"
@@ -253,11 +255,11 @@ Tests: `node --test tests/` (no dependencies). New commands are picked up automa
 - `page: DOM interactive` / `DOMContentLoaded done` / `load event done` (Navigation Timing);
 - `event: first focus` / `resize` / `visibilitychange` / `first animation frame` (when the panel is shown and starts drawing).
 
-Steps recorded: the parallel setup calls, each command source (named `<file>#<n>` after the script that registered it), the first render, first paint, and the unread-count pass, which finishes after the palette is shown. Each step stores `{start, end}` in ms since the popup document started loading, so overlapping steps are visible. It also stores counts (accounts, folders, selected messages, extra selection pages, commands, rows, unread-count calls, slowest unread call).
+Steps recorded: the parallel setup calls, each command source (named `<file>#<n>` after the script that registered it), the first render, first paint, and the deferred sources, which finish after the palette is shown. Each step stores `{start, end}` in ms since the popup document started loading, so overlapping steps are visible. It also stores counts: accounts, folders, selected messages, extra selection pages, commands, rows (total and first chunk), font size (cached, actual, changed after load), and `resizeEvents` (more than one means the popup changed size after Thunderbird first measured it).
 
-- After first paint, a summary is logged to the popup console as `[palette timing]`, and the run is saved to `storage.local.startupTimings` (last 10 runs). Unread counts are added to the run when they finish.
+- After first paint, a summary is logged to the popup console as `[palette timing]`, and the run is saved to `storage.local.startupTimings` (last 10 runs). Deferred sources are added to the run when they finish.
 - **Debug: Copy Startup Timings** copies all saved runs to the clipboard, or logs them if clipboard access is refused.
-- Debug switches live in `storage.local.debug`, set from the extension's Inspect console: `messenger.storage.local.set({ debug: { skipUnreadCounts: true } })` disables unread counts so you can compare runs with and without them. Clear with `messenger.storage.local.remove("debug")`.
+- "Action failed" logs name the command id.
 
 ## Known limitations
 

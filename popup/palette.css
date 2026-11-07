@@ -191,26 +191,6 @@ html, body {
   flex-shrink: 0;
 }
 
-/* Count pill, e.g. unread messages on "Go to:" rows. Every row has one;
-   it's hidden until it has text. */
-.row-badge:empty {
-  display: none;
-}
-
-/* Count pill, e.g. unread messages on "Go to:" rows. */
-.row-badge {
-  flex-shrink: 0;
-  min-width: 1.47rem;
-  padding: 0 0.4rem;
-  border-radius: 999px;
-  background: var(--row-selected);
-  color: var(--accent);
-  font-size: 0.8rem;
-  font-weight: 600;
-  line-height: 1.33rem;
-  text-align: center;
-}
-
 .row-match {
   color: var(--accent);
   font-weight: 600;

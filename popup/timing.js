@@ -6,8 +6,8 @@
 //           loading (performance.now()), so parallel steps show overlap;
 //   counts  name → number (folders, selected messages, pages, rows, …).
 // After the first paint, a one-line summary is logged and the run is saved to
-// storage.local "startupTimings" (last TIMING_RUNS_KEPT runs). Unread counts
-// finish later and are added to the same run when they do.
+// storage.local "startupTimings" (last TIMING_RUNS_KEPT runs). Deferred
+// sources finish later and are added to the same run when they do.
 
 const TIMING_RUNS_KEPT = 10;
 
@@ -117,6 +117,12 @@ for (const type of ["load", "pageshow", "focus", "resize", "visibilitychange"]) 
     if (!Timing.run.steps[name]) Timing.mark(name);
   });
 }
+// Every resize, not just the first: more than one means the popup changed
+// size after Thunderbird first measured it.
+window.addEventListener?.("resize", () => {
+  Timing.count("resizeEvents");
+  Timing.mark("event: last resize");
+});
 if (typeof requestAnimationFrame === "function") {
   requestAnimationFrame(() => Timing.mark("event: first animation frame"));
 }

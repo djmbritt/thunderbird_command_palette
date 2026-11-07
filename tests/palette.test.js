@@ -375,3 +375,37 @@ test("junk commands need a selected message", async () => {
   p.type("junk");
   assert.ok(!p.labels().some(l => l.startsWith("Mark as")));
 });
+
+test("the cached font size is applied by early.js on its own, before any API call", async () => {
+  // No experiment: applyUIFontSize does nothing, so only early.js can set it.
+  const p = await loadPalette({ selected: [], initialLocalStorage: { uiFontSize: "18" } });
+  assert.equal(p.documentElement.style.fontSize, "18px");
+});
+
+test("an unchanged font size doesn't touch the page or the cache again", async () => {
+  const p = await loadPalette({
+    selected: [],
+    initialLocalStorage: { uiFontSize: "18" },
+    palette: { getNewMail() {}, getUIFontSize: async () => 18 }
+  });
+  await settle();
+  const run = p.store.startupTimings?.[0];
+  assert.equal(run?.counts.fontSizeChangedAfterLoad, undefined);
+  assert.equal(run?.counts.fontSizeCachedPx, 18);
+  assert.equal(p.local.get("uiFontSize"), "18");
+});
+
+test("a changed font size is applied and cached for next time", async () => {
+  const p = await loadPalette({
+    selected: [],
+    initialLocalStorage: { uiFontSize: "15" },
+    palette: { getNewMail() {}, getUIFontSize: async () => 20 }
+  });
+  assert.equal(p.documentElement.style.fontSize, "20px");
+  assert.equal(p.local.get("uiFontSize"), "20");
+});
+
+test("an implausible cached font size is ignored", async () => {
+  const p = await loadPalette({ selected: [], initialLocalStorage: { uiFontSize: "300" } });
+  assert.equal(p.documentElement.style.fontSize, undefined);
+});

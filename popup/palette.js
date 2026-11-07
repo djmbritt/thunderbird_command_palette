@@ -36,16 +36,10 @@ const MRU_CAP = 50;
 let mruList = [];
 let mruRank = new Map(); // id -> position (0 = most recent)
 
-// Diagnostic switches, set from a devtools console, e.g.
-//   messenger.storage.local.set({ debug: { skipUnreadCounts: true } })
-// Read together with the MRU list so they cost no extra round trip.
-let debugSettings = {};
-
 async function loadMru() {
   try {
-    const r = await messenger.storage.local.get(["mru", "debug"]);
+    const r = await messenger.storage.local.get(["mru"]);
     mruList = Array.isArray(r.mru) ? r.mru : [];
-    debugSettings = r.debug && typeof r.debug === "object" ? r.debug : {};
   } catch (e) {
     console.warn("[palette] mru load failed", e);
     mruList = [];
@@ -100,13 +94,22 @@ async function collectMessages(list) {
 
 // Scale the palette with Thunderbird's UI font size. All text sizes in
 // palette.css are rem, so setting the root font size scales everything.
-// Without the experiment, the CSS fallback (15px) applies.
+// popup/early.js already applied the size cached from the last open; this
+// only touches the page (and the cache) if the size has changed, so the
+// popup normally keeps the size it was first laid out with. Without the
+// experiment, the CSS fallback (15px) applies.
 async function applyUIFontSize() {
   if (typeof messenger.palette?.getUIFontSize !== "function") return;
   try {
     const px = await messenger.palette.getUIFontSize();
+    const cached = Number(localStorage.getItem(UI_FONT_SIZE_CACHE_KEY)) || 0;
+    Timing.set("fontSizeCachedPx", cached);
+    Timing.set("fontSizeActualPx", px);
     // Ignore missing/implausible values rather than render something unusable.
-    if (px >= 8 && px <= 40) document.documentElement.style.fontSize = `${px}px`;
+    if (!isPlausibleFontSize(px) || px === cached) return;
+    document.documentElement.style.fontSize = `${px}px`;
+    localStorage.setItem(UI_FONT_SIZE_CACHE_KEY, String(px));
+    Timing.set("fontSizeChangedAfterLoad", 1);
   } catch (e) {
     console.warn("[palette] getUIFontSize failed", e);
   }
@@ -168,7 +171,7 @@ async function executeAndClose(cmd) {
     await cmd.run();
     success = true;
   } catch (e) {
-    console.error("Action failed:", e);
+    console.error(`Action failed: ${cmd.id || cmd.label}`, e);
   } finally {
     // Destructive commands are never recorded, so they can't float to the
     // top of the empty-query list and be fired by a reflexive Enter.
@@ -451,7 +454,6 @@ function filterCommands(query, mode = null) {
 }
 
 let rowEls = [];
-let badgeEls = []; // badge <span> per row, parallel to rowEls
 let renderToken = 0;
 
 // Rows built synchronously on the first render; the rest follow right after
@@ -478,7 +480,6 @@ function render({ firstChunk = false } = {}) {
   const token = ++renderToken;
   resultsEl.innerHTML = "";
   rowEls = [];
-  badgeEls = [];
   emptyEl.hidden = filtered.length > 0;
 
   const initialRows = firstChunk ? Math.min(filtered.length, FIRST_CHUNK_ROWS) : filtered.length;
@@ -526,15 +527,6 @@ function appendRows(upTo) {
       li.appendChild(hint);
     }
 
-    // Count pill on the far right (e.g. unread). Always present, empty when
-    // there's no badge, so late-arriving counts can be filled in place
-    // (refreshBadges) without rebuilding the list.
-    const badge = document.createElement("span");
-    badge.className = "row-badge";
-    badge.textContent = entry.cmd.badge || "";
-    li.appendChild(badge);
-    badgeEls.push(badge);
-
     // mousemove (not mouseenter) so rows scrolling under a stationary
     // pointer during keyboard navigation don't steal the selection.
     li.addEventListener("mousemove", () => {
@@ -549,15 +541,6 @@ function appendRows(upTo) {
     paintRow(i);
     resultsEl.appendChild(li);
   }
-}
-
-// Update badge text on the rendered rows (badges are getters that may have
-// changed, e.g. after unread counts load).
-function refreshBadges() {
-  badgeEls.forEach((badge, i) => {
-    const text = filtered[i]?.cmd.badge || "";
-    if (badge.textContent !== text) badge.textContent = text;
-  });
 }
 
 // Refresh one row's selection/armed state and label.
@@ -819,13 +802,6 @@ async function buildCommands(env, deferred) {
   return commandSources.flatMap(s => s.result);
 }
 
-// Callbacks to run once the palette is visible (e.g. unread counts).
-const afterFirstPaintHooks = [];
-
-function onAfterFirstPaint(fn) {
-  afterFirstPaintHooks.push(fn);
-}
-
 let deferredReady = false;
 let enterQueued = false;
 let enterTimer = null;
@@ -908,8 +884,7 @@ function runPendingCommand(pending) {
 // Order is tuned for time-to-visible (see "Measuring startup" in CLAUDE.md):
 //   1. parallel setup calls;
 //   2. immediate command sources → render the first rows → wait for paint;
-//   3. after paint: deferred sources (merged in place), then hooks such as
-//      unread counts (badges filled in place).
+//   3. after paint: deferred sources, merged in place.
 async function init() {
   Timing.mark("init start");
   const [, accounts, , , pending] = await Timing.time("init: parallel setup", Promise.all([
@@ -942,7 +917,6 @@ async function init() {
   const all = await Timing.time("deferred sources (after paint)", buildCommands(env, true));
   Timing.timeSync("merge deferred + re-render", () => applyDeferredCommands(all));
   Timing.set("commands", commands.length);
-  for (const hook of afterFirstPaintHooks) hook();
 
   if (pending) {
     cancelQueuedEnter();
