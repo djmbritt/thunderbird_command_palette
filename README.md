@@ -82,7 +82,7 @@ There's no build step: plain HTML, CSS and JavaScript, type-checked by TypeScrip
 node --test tests/   # run the tests (Node 18+, no dependencies)
 npm install          # once: installs TypeScript (dev only)
 npm run typecheck    # check the code against Thunderbird's MV3 API types
-npm run check        # type check + tests
+npm run check        # type check + minimum-version check + tests
 ```
 
 After loading the add-on temporarily, click **Reload** on the Debug Add-ons page after each change. [`CLAUDE.md`](CLAUDE.md) covers the architecture, how to add a command, and debugging tips.

@@ -3,7 +3,10 @@
 // schema files. Dev-only: used for type checking (see "Type checking" in
 // CLAUDE.md), never shipped in the .xpi.
 //
-//   node tools/gen-types.mjs <out.d.ts> <schema.json | schema-dir>... [--header "text"]
+//   node tools/gen-types.mjs <out.d.ts> <schema.json | schema-dir>... [--header "text"] [--since out.json]
+//
+// --since also writes { "<namespace>[.<member>]": "<version added>" } for
+// namespaces, functions, events and properties; tools/check-since.mjs uses it.
 //
 // Inputs are Thunderbird's annotated MV3 schemas
 // (github.com/thunderbird/webext-annotated-schemas, branch esr-mv3) and our own
@@ -17,12 +20,14 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const args = process.argv.slice(2);
-let header = "";
-const headerAt = args.indexOf("--header");
-if (headerAt !== -1) {
-  header = args[headerAt + 1];
-  args.splice(headerAt, 2);
+function takeOption(name) {
+  const at = args.indexOf(name);
+  if (at === -1) return "";
+  const [, value] = args.splice(at, 2);
+  return value;
 }
+const header = takeOption("--header");
+const sinceFile = takeOption("--since");
 const [outFile, ...inputs] = args;
 if (!outFile || !inputs.length) {
   console.error("usage: gen-types.mjs <out.d.ts> <schema.json | dir>... [--header text]");
@@ -46,7 +51,8 @@ for (const file of files) {
   for (const ns of parse(readFileSync(file, "utf8"))) {
     const name = ns.namespace;
     if (!name || name === "manifest") continue; // manifest types aren't runtime API
-    const merged = namespaces.get(name) ?? { types: [], functions: [], events: [], properties: {}, description: "" };
+    const merged = namespaces.get(name) ?? { types: [], functions: [], events: [], properties: {}, description: "", annotations: [] };
+    if (!merged.annotations.length) merged.annotations = ns.annotations ?? [];
     merged.types.push(...(ns.types ?? []).filter(t => t.id && !t.$extend));
     merged.functions.push(...(ns.functions ?? []));
     merged.events.push(...(ns.events ?? []));
@@ -305,4 +311,21 @@ const orphans = sorted.filter(n => parentOf(n) && !namespaces.has(parentOf(n)));
 if (orphans.length) console.warn(`namespaces without a parent (not reachable): ${orphans.join(", ")}`);
 
 writeFileSync(outFile, out.join("\n"));
+
+if (sinceFile) {
+  const since = {};
+  const add = (key, s) => {
+    const v = sinceVersion(s);
+    if (v && !unsupported(s)) since[key] = v;
+  };
+  for (const name of sorted) {
+    const ns = namespaces.get(name);
+    add(name, ns);
+    for (const fn of ns.functions) add(`${name}.${fn.name}`, fn);
+    for (const ev of ns.events) add(`${name}.${ev.name}`, ev);
+    for (const [pname, prop] of Object.entries(ns.properties)) add(`${name}.${pname}`, prop);
+  }
+  writeFileSync(sinceFile, `${JSON.stringify(since, null, 1)}\n`);
+  console.log(`wrote ${sinceFile}: ${Object.keys(since).length} entries`);
+}
 console.log(`wrote ${outFile}: ${namespaces.size} namespaces from ${files.length} files`);

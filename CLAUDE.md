@@ -127,12 +127,14 @@ tests/harness.js               Loads the popup scripts (palette.html order) into
 tests/palette.test.js          Core behaviour: pickers, confirm flow, MRU, folders, unified, panes, junk.
 tests/features.test.js         Command groups: view, folder actions, tags, prefixes, navigation, compose, search, experiment, shortcuts.
 tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
+types/api-since.json           GENERATED: Thunderbird version that added each namespace/function/event/property; used by check-since.
 types/messenger.d.ts           GENERATED messenger.* types (Thunderbird MV3 ESR schemas + experiments/schema.json). Don't edit; run `npm run types:update`.
 types/palette.d.ts             Our own shapes for JSDoc: Command, PickerSpec, ActivePicker, PaletteContext, FolderEntry, CommandSourceEntry, …
 types/globals.d.ts             Declares the lib/ globals (Fuzzy, VCard) for the type checker.
-tools/gen-types.mjs            Schema JSON → .d.ts generator; tools/update-types.sh downloads the schemas and runs it.
+tools/gen-types.mjs            Schema JSON → .d.ts (and api-since.json) generator; tools/update-types.sh downloads the schemas and runs it.
+tools/check-since.mjs          Fails on APIs newer than strict_min_version that aren't feature-detected (npm run check:since).
 tsconfig.json                  Type-checks the popup scripts (one shared global scope); tsconfig.background.json checks background.js.
-package.json                   Dev scripts only: test, typecheck, check, types:update.
+package.json                   Dev scripts only: test, typecheck, check:since, check, types:update.
 experiments/schema.json        Declares the messenger.palette.* API surface.
 experiments/implementation.js  Privileged code wrapping Thunderbird internals.
 icons/icon.svg                 Extension and toolbar icon.
@@ -251,7 +253,7 @@ For actions that need Thunderbird internals, add a function to `experiments/sche
 `npm install` once, then `npm run typecheck` (or `npm run check` for types + tests). The shipped code stays plain JavaScript: TypeScript only reads it (`allowJs`, `checkJs`, `noEmit`), so there is still no build step.
 
 - **API types are generated, not hand-written.** `types/messenger.d.ts` comes from Thunderbird's official annotated MV3 schemas (`thunderbird/webext-annotated-schemas`, branch `esr-mv3`) plus our `experiments/schema.json`. `npm run types:update` regenerates it; the header records the schema commit and Thunderbird version. Don't use `@types/thunderbird-webext-browser`: it describes the MV2 API (e.g. `MailTab.id` instead of `tabId`, no `getUnifiedFolder`).
-- **Minimum version.** The schemas are for the current ESR, newer than our `strict_min_version` 128. Every function and property carries `@since Thunderbird X` (shown on hover). Anything newer than 128 must be feature-detected (`typeof messenger.ns?.fn === "function"`), like `commands.openShortcutSettings` (140).
+- **Minimum version.** The schemas are for the current ESR, newer than our `strict_min_version` 128, so the type check alone accepts APIs that don't exist on 128. Every namespace, function and property carries `@since Thunderbird X` (shown on hover). Anything newer than 128 must be feature-detected (`typeof messenger.ns?.fn === "function"`), like `commands.openShortcutSettings` (140). `npm run check:since` (`tools/check-since.mjs`, part of `npm run check`, no install needed) enforces this: it finds `messenger.*` uses in `background.js`, `popup/` and `lib/`, looks them up in `types/api-since.json` (written by the generator), and fails on any newer than `strict_min_version` without a `typeof messenger.…` check in the same file. Mark a deliberate exception with a `since-ok` comment on the line. It can't see new *options* on old functions (the schemas only date namespaces, functions, events and properties), and it skips comments and `messenger.palette.*`.
 - **Our own shapes** live in `types/palette.d.ts` and are used from JSDoc: `/** @type {Command[]} */`, `/** @returns {PickerSpec} */`. Command-building helpers declare `@returns {Command[]}` (and `.map(/** @returns {Command} */ (x) => ({…}))` for mapped tables) so literals like `requires: "mailTab"` are checked against the allowed values. Tables of API enum values get a `@type` using the API type, e.g. `messenger.mailTabs.MailTab["sortType"]`.
 - **`strict` is on**, so every function parameter needs a JSDoc type (`/** @param {string} text */`) and possibly-missing values must be handled. Many API fields are optional in the schema (`tab.id`, `tab.windowId`, `identity.email`), so guard them rather than assume. Commands gated with `requires` get their context through `requireMailTab()` (core) or `composeTabId()` (compose.js), which throw if it's missing, instead of `ctx.mailTab.…`. For DOM lookups that always succeed, cast: `/** @type {HTMLElement} */ (document.getElementById("…"))`.
 - **Not checked:** `experiments/implementation.js` (privileged code; Thunderbird internals have no types) and `tests/`.

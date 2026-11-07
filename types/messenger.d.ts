@@ -4842,187 +4842,248 @@ declare namespace messenger {
     interface Root {
       /**
        * The accounts API provides access to the user's server accounts.
+       * @since Thunderbird 68.0
        */
       readonly accounts: accounts;
       /**
        * Use the action API to add a button to Thunderbird's unified toolbar. In addition to its icon, an action button can also have a tooltip, a badge, and a popup.
+       * @since Thunderbird 115.0
        */
       readonly action: action;
       /**
        * The addressBooks API allows to access and manage the user's address books.
+       * @since Thunderbird 68.0
        */
       readonly addressBooks: addressBooks;
+      /**
+       * @since Thunderbird 60.0
+       */
       readonly alarms: alarms;
       /**
        * Use the browser.browserSettings API to control global settings of the browser.
+       * @since Thunderbird 60.0
        */
       readonly browserSettings: browserSettings;
       /**
        * Use the chrome.browsingData API to remove browsing data from a user's local profile.
+       * @since Thunderbird 60.0
        */
       readonly browsingData: browsingData;
       readonly chromeSettingsOverrides: chromeSettingsOverrides;
       /**
        * Offers the ability to write to the clipboard. Reading is not supported because the clipboard can already be read through the standard web platform APIs.
+       * @since Thunderbird 60.0
        */
       readonly clipboard: clipboard;
       /**
        * The cloudFile (a.k.a. fileLink) API allows to create a provider to store large attachments in the cloud instead of attaching them directly to the message.
+       * @since Thunderbird 60.4.0
        */
       readonly cloudFile: cloudFile;
       /**
        * Use the commands API to add keyboard shortcuts that trigger actions in your extension, for example opening one of the action popups or sending a command to the extension.
+       * @since Thunderbird 68.0
        */
       readonly commands: commands;
       /**
        * The compose API allows to interact with the message composition window.
+       * @since Thunderbird 68.0
        */
       readonly compose: compose;
       /**
        * Use a composeAction to put a button in the message composition toolbars. In addition to its icon, a composeAction button can also have a tooltip, a badge, and a popup.
+       * @since Thunderbird 68.0
        */
       readonly composeAction: composeAction;
       readonly composeScripts: composeScripts;
       /**
        * Use the browser.contextualIdentities API to query and modify contextual identity, also called as containers.
+       * @since Thunderbird 60.0
        */
       readonly contextualIdentities: contextualIdentities;
       /**
        * Use the browser.cookies API to query and modify cookies, and to be notified when they change.
+       * @since Thunderbird 60.0
        */
       readonly cookies: cookies;
       /**
        * Use the declarativeNetRequest API to block or modify network requests by specifying declarative rules.
+       * @since Thunderbird 115.0
        */
       readonly declarativeNetRequest: declarativeNetRequest;
       /**
        * Asynchronous DNS API
+       * @since Thunderbird 60.0
        */
       readonly dns: dns;
+      /**
+       * @since Thunderbird 60.0
+       */
       readonly downloads: downloads;
       /**
        * The chrome.events namespace contains common types used by APIs dispatching events to notify you when something interesting happens.
+       * @since Thunderbird ≤50
        */
       readonly events: events;
       readonly experiments: experiments;
       /**
        * The browser.extension API has utilities that can be used by any extension page. It includes support for exchanging messages between an extension and its content scripts or between extensions, as described in detail in $(topic:messaging)[Message Passing].
+       * @since Thunderbird 60.0
        */
       readonly extension: extension;
       /**
        * The browser.extensionTypes API contains type declarations for WebExtensions.
+       * @since Thunderbird 60.0
        */
       readonly extensionTypes: extensionTypes;
       /**
        * The folders API allows to access and manage the user's message folders.
+       * @since Thunderbird 68.0
        */
       readonly folders: folders;
       /**
        * Use the browser.i18n infrastructure to implement internationalization across your whole app or extension.
+       * @since Thunderbird 60.0
        */
       readonly i18n: i18n;
       /**
        * The identities API allows to manage the user's identities (each account can have multiple identities).
+       * @since Thunderbird 91.0
        */
       readonly identities: identities;
       /**
        * Use the chrome.identity API to get OAuth2 access tokens.
+       * @since Thunderbird 60.0
        */
       readonly identity: identity;
       /**
        * Use the browser.idle API to detect when the machine's idle state changes.
+       * @since Thunderbird 60.0
        */
       readonly idle: idle;
       /**
        * The mailTabs API allows to interact with Thunderbird's main mail tab (a.k.a 3-pane tab).
+       * @since Thunderbird 68.0
        */
       readonly mailTabs: mailTabs;
       /**
        * The browser.management API provides ways to manage the list of extensions that are installed and running.
+       * @since Thunderbird 60.0
        */
       readonly management: management;
       /**
        * The menus API allows to add items to Thunderbird's menus. You can choose what types of objects your context menu additions apply to, such as images, hyperlinks, and pages.
+       * @since Thunderbird 68.0
        */
       readonly menus: menus;
       /**
        * A message can be displayed in either Thunderbird's main mail tab (a.k.a 3-pane tab), a tab of its own, or in a window of its own. All are referenced by `tabId` in this API. Display windows are considered to have exactly one tab, which has limited functionality compared to tabs from the main window.
+       * @since Thunderbird 68.1.1
        */
       readonly messageDisplay: messageDisplay;
       /**
        * Use a messageDisplayAction to put a button in the message display toolbar. In addition to its icon, a messageDisplayAction button can also have a tooltip, a badge, and a popup.
+       * @since Thunderbird 68.2.3
        */
       readonly messageDisplayAction: messageDisplayAction;
       readonly messageDisplayScripts: messageDisplayScripts;
       /**
        * The messages API allows to access and manage the user's messages.
+       * @since Thunderbird 68.0
        */
       readonly messages: messages;
       /**
        * The messengerSettings API allows to access global messenger settings.
+       * @since Thunderbird 140.0
        */
       readonly messengerSettings: messengerSettings;
       /**
        * The messengerUtilities API provides helpful methods for working with messages and emails.
+       * @since Thunderbird 140.0
        */
       readonly messengerUtilities: messengerUtilities;
+      /**
+       * @since Thunderbird 60.0
+       */
       readonly notifications: notifications;
       readonly oauthProvider: oauthProvider;
       readonly palette: palette;
+      /**
+       * @since Thunderbird 60.0
+       */
       readonly permissions: permissions;
       /**
        * PKCS#11 module management API
+       * @since Thunderbird 60.0
        */
       readonly pkcs11: pkcs11;
+      /**
+       * @since Thunderbird 60.0
+       */
       readonly privacy: privacy;
       readonly protocolHandlers: protocolHandlers;
       /**
        * Provides access to global proxy settings for Thunderbird and proxy event listeners to handle dynamic proxy implementations.
+       * @since Thunderbird 153.0
        */
       readonly proxy: proxy;
       /**
        * Use the browser.runtime API to retrieve the background page, return details about the manifest, and listen for and respond to events in the app or extension lifecycle. You can also use this API to convert the relative path of URLs to fully-qualified URLs.
+       * @since Thunderbird 60.0
        */
       readonly runtime: runtime;
       /**
        * Use the scripting API to execute script in different contexts.
+       * @since Thunderbird 102.0
        */
       readonly scripting: scripting;
       /**
        * The sessions API allows to add tab related session data to Thunderbird's tabs, which will be restored on app restart.
+       * @since Thunderbird 115.0
        */
       readonly sessions: sessions;
       /**
        * The spaces API allows to manage built-in and custom spaces, and to add buttons for custom spaces to Thunderbird's spaces toolbar.
+       * @since Thunderbird 115.0
        */
       readonly spaces: spaces;
       /**
        * Use the browser.storage API to store, retrieve, and track changes to user data.
+       * @since Thunderbird 60.0
        */
       readonly storage: storage;
       /**
        * The tabs API supports creating, modifying and interacting with tabs in Thunderbird windows.
+       * @since Thunderbird 60.3.0
        */
       readonly tabs: tabs;
       /**
        * The theme API allows for customization of Thunderbird's visual elements.
+       * @since Thunderbird 78.7.1
        */
       readonly theme: theme;
       /**
        * Contains types used by other schemas.
+       * @since Thunderbird 60.0
        */
       readonly types: types;
+      /**
+       * @since Thunderbird 140.0
+       */
       readonly userScripts: userScripts;
       /**
        * Use the browser.webNavigation API to receive notifications about the status of navigation requests in-flight.
+       * @since Thunderbird 60.0
        */
       readonly webNavigation: webNavigation;
       /**
        * Use the browser.webRequest API to observe and analyze traffic and to intercept, block, or modify requests in-flight.
+       * @since Thunderbird 60.0
        */
       readonly webRequest: webRequest;
       /**
        * The windows API supports creating, modifying and interacting with Thunderbird windows.
+       * @since Thunderbird 60.3.0
        */
       readonly windows: windows;
     }
@@ -5318,14 +5379,17 @@ declare namespace messenger {
     interface addressBooks {
       /**
        * The contacts API allows to access and manage the user's contacts.
+       * @since Thunderbird 128.0
        */
       readonly contacts: addressBooks_contacts;
       /**
        * The mailingLists API allows to access and manage the user's mailing lists.
+       * @since Thunderbird 128.0
        */
       readonly mailingLists: addressBooks_mailingLists;
       /**
        * The address book provider API allows to add address books, which are not stored or cached by Thunderbird itself, but are handled completely by the extension. Address books created by the this API will forward all access requests to the WebExtension.
+       * @since Thunderbird 91.0
        */
       readonly provider: addressBooks_provider;
       /**
@@ -5653,6 +5717,7 @@ declare namespace messenger {
     interface browserSettings {
       /**
        * Use the browserSettings.colorManagement API to query and set items related to color management.
+       * @since Thunderbird 91.0
        */
       readonly colorManagement: browserSettings_colorManagement;
       /**
@@ -8378,6 +8443,7 @@ declare namespace messenger {
     interface messages {
       /**
        * The messages.tags API allows to manage the user's message tags.
+       * @since Thunderbird 128.0
        */
       readonly tags: messages_tags;
       /**
@@ -9030,14 +9096,17 @@ declare namespace messenger {
     interface privacy {
       /**
        * Use the browser.privacy API to control usage of the features in the browser that can affect a user's privacy.
+       * @since Thunderbird 60.0
        */
       readonly network: privacy_network;
       /**
        * Use the browser.privacy API to control usage of the features in the browser that can affect a user's privacy.
+       * @since Thunderbird 60.0
        */
       readonly services: privacy_services;
       /**
        * Use the browser.privacy API to control usage of the features in the browser that can affect a user's privacy.
+       * @since Thunderbird 60.0
        */
       readonly websites: privacy_websites;
     }
@@ -9425,10 +9494,12 @@ declare namespace messenger {
     interface scripting {
       /**
        * The scripting.compose API allows to register and unregister scripts for the message compose window.
+       * @since Thunderbird 128.0
        */
       readonly compose: scripting_compose;
       /**
        * The scripting.messageDisplay API allows to register and unregister scripts for the message display window.
+       * @since Thunderbird 128.0
        */
       readonly messageDisplay: scripting_messageDisplay;
       /**

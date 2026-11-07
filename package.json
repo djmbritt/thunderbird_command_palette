@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test tests/",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.background.json",
-    "check": "npm run typecheck && npm test",
+    "check:since": "node tools/check-since.mjs",
+    "check": "npm run typecheck && npm run check:since && npm test",
     "types:update": "tools/update-types.sh"
   },
   "devDependencies": {
