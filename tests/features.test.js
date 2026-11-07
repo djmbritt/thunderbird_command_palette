@@ -493,8 +493,10 @@ async function until(fn, ms = 1000) {
   }
 }
 
+const TIMING_ON = { debugStartupTiming: "1" };
+
 test("each open saves a startup timing run with named steps and counts", async () => {
-  const p = await loadPalette({ selected: [] });
+  const p = await loadPalette({ selected: [], initialLocalStorage: TIMING_ON });
   await until(() => p.store.startupTimings?.[0]?.steps.firstPaint);
   const [run] = p.store.startupTimings;
   for (const step of ["setup: accounts.list(true)", "setup: captureContext", "buildCommands (immediate)",
@@ -509,7 +511,7 @@ test("each open saves a startup timing run with named steps and counts", async (
 
 test("Debug: Copy Startup Timings copies a readable summary", async () => {
   let copied = null;
-  const p = await loadPalette({ selected: [] });
+  const p = await loadPalette({ selected: [], initialLocalStorage: TIMING_ON });
   await until(() => p.store.startupTimings?.[0]?.steps.firstPaint);
   p.context.navigator = { clipboard: { writeText: async (t) => { copied = t; } } };
   p.type("copy startup timings");
@@ -524,7 +526,7 @@ test("Debug: Copy Startup Timings copies a readable summary", async () => {
 
 test("only the first rows are built before the first paint; the rest follow", async () => {
   const many = Array.from({ length: 60 }, (_, i) => ({ id: `a1://F${i}`, name: `Folder ${i}`, path: `/F${i}`, subFolders: [] }));
-  const p = await loadPalette({ selected: [], extraFolders: many });
+  const p = await loadPalette({ selected: [], extraFolders: many, initialLocalStorage: TIMING_ON });
   await until(() => p.store.startupTimings?.[0]?.steps.firstPaint);
   const run = p.store.startupTimings[0];
   assert.equal(run.counts.rowsInFirstChunk, 30);
@@ -590,4 +592,32 @@ test("a queued Enter is cancelled by typing, and gives up waiting after a second
   p.key("Enter");
   await until(() => p.state.closed, 2000);
   assert.deepEqual(p.calls, [["mailTabs.update", 1, { layout: "wide" }]]);
+});
+
+test("startup timing is off by default: nothing logged or saved, no copy command", async () => {
+  const p = await loadPalette({ selected: [] });
+  await wait(50);
+  assert.equal(p.store.startupTimings, undefined);
+  p.type("startup timing");
+  assert.deepEqual(p.labels(), ["Debug: Turn On Startup Timing"]);
+});
+
+test("the toggle turns timing on, and turning it off clears saved runs", async () => {
+  const on = await loadPalette({ selected: [] });
+  on.type("turn on startup timing");
+  on.key("Enter");
+  await until(() => on.state.closed);
+  assert.equal(on.local.get("debugStartupTiming"), "1");
+
+  const off = await loadPalette({
+    selected: [],
+    initialLocalStorage: TIMING_ON,
+    initialStore: { startupTimings: [{ at: "old", steps: {}, counts: {} }] }
+  });
+  off.type("turn off startup timing");
+  assert.equal(off.labels()[0], "Debug: Turn Off Startup Timing");
+  off.key("Enter");
+  await until(() => off.state.closed);
+  assert.equal(off.local.get("debugStartupTiming"), undefined);
+  assert.equal(off.store.startupTimings, undefined);
 });

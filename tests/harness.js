@@ -92,7 +92,11 @@ async function loadPalette({ initialLocalStorage = {}, initialStore = {}, api = 
   const store = { ...initialStore };
 
   const messenger = {
-    storage: { local: { get: async () => ({ ...store }), set: async (o) => { Object.assign(store, plain(o)); } } },
+    storage: { local: {
+      get: async () => ({ ...store }),
+      set: async (o) => { Object.assign(store, plain(o)); },
+      remove: async (keys) => { for (const k of [].concat(keys)) delete store[k]; }
+    } },
     accounts: {
       list: async () => [{
         id: "a1", name: "Work", type: "imap",

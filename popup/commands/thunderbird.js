@@ -95,15 +95,36 @@ async function copyStartupTimings() {
   }
 }
 
+// Turning timing off also clears saved runs, so stale numbers can't be
+// mistaken for current ones next time it's switched on.
+async function toggleStartupTiming() {
+  const on = !isTimingEnabled();
+  setTimingEnabled(on);
+  if (!on) await messenger.storage.local.remove("startupTimings");
+  await notify(on
+    ? "Startup timing is on. Open the palette a few times, then run Debug: Copy Startup Timings."
+    : "Startup timing is off. Saved timings were cleared.");
+}
+
 registerCommands(() => [
   {
+    id: "debug-toggle-startup-timing",
+    get label() {
+      return isTimingEnabled() ? "Debug: Turn Off Startup Timing" : "Debug: Turn On Startup Timing";
+    },
+    icon: "⏱",
+    keywords: "performance slow speed profile diagnostics measure",
+    noHistory: true,
+    run: toggleStartupTiming
+  },
+  ...(isTimingEnabled() ? [{
     id: "debug-copy-startup-timings",
     label: "Debug: Copy Startup Timings",
     icon: "⏱",
     keywords: "performance slow speed profile diagnostics",
     noHistory: true,
     run: copyStartupTimings
-  },
+  }] : []),
   ...buildInternalCommands(),
   ...(typeof messenger.commands?.openShortcutSettings === "function" ? [{
     id: "configure-shortcuts",

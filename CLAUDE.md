@@ -31,7 +31,7 @@ Command groups live in `popup/commands/*.js` and call `registerCommands(source, 
 
 ### Startup order
 
-Measured startup (see **Measuring startup**) showed that most of the time to visible was spent *after* our code finished, before the first paint. Our own work is ~30–60 ms per open; the rest is Thunderbird creating and showing the panel (the first paint coincides with the popup's `focus` event). So `init()` is ordered for time-to-visible:
+Measured startup (see **Measuring startup**): first paint went from ~400 ms to ~140 ms typical. Most of the original time was spent *after* our code finished, waiting for Thunderbird to show the panel. The biggest single cause was the root font size changing after load (CSS default 15 px → the user's 14 px), which resized the rem-sized popup after Thunderbird had measured it (fixed by `early.js`, see **Styling**). Our own work is ~30–60 ms per open. `init()` is ordered for time-to-visible:
 1. Parallel setup calls (MRU, accounts, context, font size, pending shortcut).
 2. Immediate sources → filter → `render({ firstChunk: true })` builds only the first `FIRST_CHUNK_ROWS` (30) rows. The rest are appended right after the paint, and a newer render cancels that append (`renderToken`). `select()` calls `ensureRendered()` so arrowing past the first chunk works.
 3. Wait for the first paint (`afterNextPaint`: rAF, then a timeout).
@@ -257,8 +257,10 @@ Tests: `node --test tests/` (no dependencies). New commands are picked up automa
 
 Steps recorded: the parallel setup calls, each command source (named `<file>#<n>` after the script that registered it), the first render, first paint, and the deferred sources, which finish after the palette is shown. Each step stores `{start, end}` in ms since the popup document started loading, so overlapping steps are visible. It also stores counts: accounts, folders, selected messages, extra selection pages, commands, rows (total and first chunk), font size (cached, actual, changed after load), and `resizeEvents` (more than one means the popup changed size after Thunderbird first measured it).
 
-- After first paint, a summary is logged to the popup console as `[palette timing]`, and the run is saved to `storage.local.startupTimings` (last 10 runs). Deferred sources are added to the run when they finish.
-- **Debug: Copy Startup Timings** copies all saved runs to the clipboard, or logs them if clipboard access is refused.
+**Reporting is off by default.** Recording is just in-memory timestamps, but logging and saving only happen when enabled:
+- **Debug: Turn On Startup Timing** sets `localStorage.debugStartupTiming = "1"`. It's synchronous, so checking it costs no API round trip. **Debug: Turn Off Startup Timing** removes it and clears saved runs.
+- While on: after the first paint, a summary is logged to the popup console as `[palette timing]`, and the run is saved to `storage.local.startupTimings` (last 10 runs). Deferred sources are added to the run when they finish.
+- While on: **Debug: Copy Startup Timings** copies all saved runs to the clipboard, or logs them if clipboard access is refused.
 - "Action failed" logs name the command id.
 
 ## Known limitations

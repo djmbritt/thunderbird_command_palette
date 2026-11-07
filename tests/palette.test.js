@@ -385,7 +385,7 @@ test("the cached font size is applied by early.js on its own, before any API cal
 test("an unchanged font size doesn't touch the page or the cache again", async () => {
   const p = await loadPalette({
     selected: [],
-    initialLocalStorage: { uiFontSize: "18" },
+    initialLocalStorage: { uiFontSize: "18", debugStartupTiming: "1" }, // timing on, to read the counts
     palette: { getNewMail() {}, getUIFontSize: async () => 18 }
   });
   await settle();

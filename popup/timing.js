@@ -5,11 +5,28 @@
 //   steps   name → { start, end } in ms since the popup document started
 //           loading (performance.now()), so parallel steps show overlap;
 //   counts  name → number (folders, selected messages, pages, rows, …).
-// After the first paint, a one-line summary is logged and the run is saved to
-// storage.local "startupTimings" (last TIMING_RUNS_KEPT runs). Deferred
-// sources finish later and are added to the same run when they do.
+// Recording is always on (it's just a few timestamps in memory). Reporting is
+// OFF by default: only when enabled ("Debug: Turn On Startup Timing", stored
+// in localStorage so checking it is synchronous) is a summary logged after the
+// first paint and the run saved to storage.local "startupTimings" (last
+// TIMING_RUNS_KEPT runs). Deferred sources finish later and are added to the
+// same run when they do.
 
 const TIMING_RUNS_KEPT = 10;
+const TIMING_ENABLED_KEY = "debugStartupTiming";
+
+function isTimingEnabled() {
+  try {
+    return localStorage.getItem(TIMING_ENABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setTimingEnabled(on) {
+  if (on) localStorage.setItem(TIMING_ENABLED_KEY, "1");
+  else localStorage.removeItem(TIMING_ENABLED_KEY);
+}
 
 const Timing = {
   run: {
@@ -93,12 +110,14 @@ const Timing = {
 
   // Called once the first frame with results has been painted.
   async reportFirstPaint() {
+    if (!isTimingEnabled()) return;
     this.recordNavigation();
     console.log(`[palette timing]\n${this.summary()}`);
     await this.save();
   },
 
   async reportLate(name) {
+    if (!isTimingEnabled()) return;
     const s = this.run.steps[name];
     if (s) console.log(`[palette timing] ${name}: ${s.end - s.start} ms (done at ${s.end} ms)`);
     await this.save();
