@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Command Palette</title>
+  <link rel="stylesheet" href="palette.css">
+</head>
+<body>
+  <div id="palette">
+    <input id="query" type="text" role="combobox" aria-expanded="true" aria-controls="results" aria-autocomplete="list" aria-label="Command" autocomplete="off" spellcheck="false" placeholder="Type a command or folder…">
+    <ul id="results" role="listbox" aria-label="Commands"></ul>
+    <div id="empty" role="status" hidden>No matching commands.</div>
+  </div>
+  <script src="../lib/fuzzy.js"></script>
+  <script src="palette.js"></script>
+</body>
+</html>

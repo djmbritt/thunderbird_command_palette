@@ -1,0 +1,42 @@
+[
+  {
+    "namespace": "palette",
+    "functions": [
+      {
+        "name": "getNewMail",
+        "type": "function",
+        "description": "Trigger a check for new mail. If accountId is omitted, checks all authenticated accounts via Thunderbird's cmd_getMsgsForAuthAccounts. If provided, checks that one account by calling getNewMessages on its incoming server.",
+        "async": true,
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "string",
+            "optional": true,
+            "description": "WebExtension account ID. Omit for all accounts."
+          }
+        ]
+      },
+      {
+        "name": "openSettings",
+        "type": "function",
+        "description": "Open Thunderbird's Settings (about:preferences) in a tab in the main window.",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "openAccountSettings",
+        "type": "function",
+        "description": "Open Thunderbird's Account Settings dialog.",
+        "async": true,
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "string",
+            "optional": true,
+            "description": "WebExtension account ID to focus. Omit for first account."
+          }
+        ]
+      }
+    ]
+  }
+]

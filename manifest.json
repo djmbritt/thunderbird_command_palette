@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Command Palette",
+  "description": "VSCode-style command palette for Thunderbird. Press Ctrl+Shift+P to summon.",
+  "version": "0.4.0",
+  "author": "kwihi",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "command-palette@kwihi.local",
+      "strict_min_version": "128.0"
+    }
+  },
+
+  "action": {
+    "default_title": "Command Palette",
+    "default_popup": "popup/palette.html"
+  },
+
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Open the Command Palette"
+    }
+  },
+
+  "permissions": [
+    "accountsRead",
+    "messagesRead",
+    "messagesUpdate",
+    "messagesMove",
+    "messagesDelete",
+    "compose",
+    "addressBooks",
+    "tabs",
+    "storage"
+  ],
+
+  "experiment_apis": {
+    "palette": {
+      "schema": "experiments/schema.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "paths": [["palette"]],
+        "script": "experiments/implementation.js"
+      }
+    }
+  }
+}
