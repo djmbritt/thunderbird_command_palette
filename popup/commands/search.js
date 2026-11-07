@@ -1,7 +1,7 @@
 // Message search for the "?" prefix ("?invoice", "?alice").
 //
 // Loaded after popup/palette.js (core); registers via registerMessageSearch.
-// Runs two messages.query calls (subject, sender) across all folders, merges
+// Runs messages.query for the subject and the sender across all folders, merges
 // them newest-first, and lists the top results. Enter opens the message in a
 // new tab. Only the first page of each query is used and the list is then
 // aborted, so a broad term on a big mailbox doesn't keep searching after the
@@ -40,18 +40,28 @@ function displayAuthor(author) {
   return (m && m[1]) || author || "";
 }
 
+// messages.query matches the subject case-sensitively (the author match is
+// case-insensitive), so the subject is also searched in lower case and
+// capitalised: "invoice" finds "Invoice #2041" and "Your invoice".
+/** @param {string} text */
+function subjectVariants(text) {
+  const lower = text.toLocaleLowerCase();
+  const capitalised = lower.charAt(0).toLocaleUpperCase() + lower.slice(1);
+  return [...new Set([text, lower, capitalised])];
+}
+
 /**
  * @param {string} text
  * @returns {Promise<Command[]>}
  */
 async function searchMessages(text) {
-  const [bySubject, byAuthor] = await Promise.all([
-    queryFirstPage({ subject: text }),
+  const results = await Promise.all([
+    ...subjectVariants(text).map(subject => queryFirstPage({ subject })),
     queryFirstPage({ author: text })
   ]);
   const seen = new Set();
   const merged = [];
-  for (const m of [...bySubject, ...byAuthor]) {
+  for (const m of results.flat()) {
     if (seen.has(m.id)) continue;
     seen.add(m.id);
     merged.push(m);

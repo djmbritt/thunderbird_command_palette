@@ -49,7 +49,7 @@ registerCommands(() => [
   {
     id: "reply-all",
     label: "Reply All",
-    icon: "↩↩",
+    icon: "⇇",
     requires: "message",
     run: () => messenger.compose.beginReply(firstSelectedId(), "replyToAll")
   },

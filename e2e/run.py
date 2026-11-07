@@ -58,6 +58,12 @@ addMessageListener("e2e:do", ({ data }) => {
   const q = doc.getElementById("query");
   if (data.op === "type") { q.value = data.arg; q.dispatchEvent(new content.Event("input")); }
   if (data.op === "key") q.dispatchEvent(new content.KeyboardEvent("keydown", { key: data.arg, bubbles: true, cancelable: true }));
+  // Ignore the real mouse pointer (screenshots: no stray hover highlight).
+  // Re-filtering also resets a selection the pointer made on the way.
+  if (data.op === "nohover") {
+    doc.getElementById("results").style.pointerEvents = "none";
+    q.dispatchEvent(new content.Event("input"));
+  }
   const shown = id => (doc.getElementById(id).hidden ? null : doc.getElementById(id).textContent);
   sendAsyncMessage("e2e:done", {
     query: q.value,
@@ -145,9 +151,13 @@ async function showInbox(selectSubject = null) {
 
 
 class Thunderbird:
-    def __init__(self, profile, log_path):
+    def __init__(self, profile, log_path, prepare=None):
+        """`prepare(profile)` may add to the profile before Thunderbird starts."""
         self.log_path = log_path
+        self.profile = profile
         subprocess.run([str(ROOT / "e2e/make-profile.sh"), str(profile)], check=True, stdout=subprocess.DEVNULL)
+        if prepare:
+            prepare(Path(profile))
         self.log = open(log_path, "w")
         self.proc = subprocess.Popen(
             ["thunderbird", "--profile", str(profile), "--new-instance", "--marionette", "--remote-allow-system-access"],
@@ -290,6 +300,21 @@ def print_message(tb):
         settings.click();
         return !W().document.querySelector("print-preview");
       }, "the print preview to close", 15000);
+    """)
+
+
+@test
+def message_search_ignores_case(tb):
+    return tb.js("""
+      // Thunderbird matches subjects case-sensitively; "?invoice" must still
+      // find "Invoice March".
+      await openPalette();
+      await palette("type", "?invoice");
+      const s = await until(async () => { const s = await palette(); return s.rows.length ? s : null; }, "search results");
+      if (s.rows[0].label !== "Invoice March") throw new Error(`results: ${s.rows.map(r => r.label).join(" | ")}`);
+      paletteBrowser()?.closest("panel")?.hidePopup();
+      await until(() => !paletteBrowser(), "the palette to close");
+      return s.rows.map(r => r.label);
     """)
 
 

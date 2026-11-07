@@ -362,10 +362,13 @@ test("?query searches subject and sender, newest first, and opens a result", asy
   p.type("?invoic");
   assert.equal(p.els.empty.textContent, "Searching…");
   await wait(320);
-  assert.deepEqual(queries.map(q => q.subject || q.author), ["invoic", "invoic"]);
+  // Subject matching is case-sensitive in Thunderbird, so the capitalised
+  // form is searched too; the author match is case-insensitive already.
+  assert.deepEqual(queries.map(q => q.subject ? `subject:${q.subject}` : `author:${q.author}`),
+    ["subject:invoic", "subject:Invoic", "author:invoic"]);
   assert.deepEqual(p.labels(), ["Lunch", "Invoice April", "Invoice March"]);
   assert.equal(p.hints()[0].startsWith("Invoicing Team · "), true);
-  assert.deepEqual(only(p.calls, "abortList"), [["abortList", "list-s"]]);
+  assert.deepEqual(only(p.calls, "abortList"), [["abortList", "list-s"], ["abortList", "list-s"]]);
 
   p.key("Enter");
   await settle();

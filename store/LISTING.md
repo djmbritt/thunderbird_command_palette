@@ -71,10 +71,12 @@ Text to paste into the ATN listing and submission forms. Not shipped in the
 >
 > **Permissions:** each permission and what it's used for is listed in the privacy policy; none are requested for future use.
 
-## Screenshots to take
+## Screenshots
 
-1. The palette open over the 3-pane window with an empty query (recent commands).
-2. Fuzzy search in action, e.g. typing "arch".
-3. The Move to Folder… picker.
-4. The `?` message search with results.
-5. Dark theme.
+In `store/screenshots/` (1280×800), taken from a throwaway Thunderbird with demo mail by `python3 e2e/screenshots.py` (Hyprland + grim; rerun after UI changes):
+
+1. `1-recent-commands.png`: the palette with an empty query (recent commands first).
+2. `2-fuzzy-search.png`: fuzzy search, typing "arch".
+3. `3-move-to-folder.png`: the Move to Folder… picker.
+4. `4-message-search.png`: `?invoice` message search.
+5. `5-dark-theme.png`: dark theme, typing "tag".

@@ -94,4 +94,5 @@ After loading the add-on temporarily, click **Reload** on the Debug Add-ons page
 - [x] verify in Thunderbird: Filter: Clear, Write to…, Calendar/Tasks/Chat, Today pane, Undo, Print, View Source, Go to Tag and the extra shortcuts (`npm run test:e2e`, Thunderbird 158)
 - [x] Undo can undo moves made from the palette (Thunderbird 140+)
 - [ ] try it on Thunderbird 128 ESR (the e2e tests only cover the installed version)
-- [ ] publish on addons.thunderbird.net: take the screenshots listed in `store/LISTING.md`, choose the release version, submit
+- [x] take the listing screenshots (`store/screenshots/`)
+- [ ] publish on addons.thunderbird.net: choose the release version, submit

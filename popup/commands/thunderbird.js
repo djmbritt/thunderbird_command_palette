@@ -58,7 +58,7 @@ const INTERNAL_COMMANDS = [
   { command: "cmd_expandAllThreads", id: "expand-threads", label: "Expand All Threads", icon: "⊞", keywords: "open threads conversations", requires: "mailTab" },
   { command: "cmd_collapseAllThreads", id: "collapse-threads", label: "Collapse All Threads", icon: "⊟", keywords: "close threads conversations", requires: "mailTab" },
   { command: "cmd_print", id: "print", label: "Print…", icon: "⎙", keywords: "print pdf", requires: "message" },
-  { command: "cmd_viewPageSource", id: "view-source", label: "View Message Source", icon: "</>", keywords: "source raw headers", requires: "message" }
+  { command: "cmd_viewPageSource", id: "view-source", label: "View Message Source", icon: "¶", keywords: "source raw headers", requires: "message" }
 ];
 
 /** @returns {Command[]} */

@@ -69,6 +69,7 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 
 Found with the e2e tests (Thunderbird 158) and Thunderbird's own source (`omni.ja`, `chrome/messenger/content/messenger/parent/ext-*.js`); the API docs don't say:
 - **`mailTabs.setQuickFilter`** clears every filter first. `false` sets the *inverted* filter ("unread: false" = only read messages); omit a key to leave it off. So pass only the filters to turn on, and `{}` to clear.
+- **`messages.query`** matches `subject` case-sensitively (`author` is case-insensitive), so `?` search also queries the lower-case and capitalised forms (`subjectVariants`).
 - **`addressBooks.contacts.query`** returns nothing without a `searchString`. To list contacts, use `contacts.list(bookId)` per book.
 - **Tag folders** (`folders.getTagFolder`): `mailTabs.update({displayedFolderId})` is rejected unless the folder pane is in Tags mode ("not viewable in any of the enabled folder modes"); the retry with `folderMode: "tags"` works.
 - **Mail tabs** are `MailTab` objects with `tabId`, not `id`; `mailTabs.create` has no `windowId`.
@@ -138,6 +139,7 @@ tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
 e2e/run.py                     End-to-end tests in a real Thunderbird (npm run test:e2e); see e2e/README.md.
 e2e/make-profile.sh            Throwaway test profile: Local Folders with test messages, add-on loaded from the working tree.
 e2e/marionette.py              Minimal Marionette (Gecko remote control) client used by run.py.
+e2e/screenshots.py             Takes the ATN listing screenshots (store/screenshots/) from a demo profile.
 types/api-since.json           GENERATED: Thunderbird version that added each namespace/function/event/property; used by check-since.
 types/messenger.d.ts           GENERATED messenger.* types (Thunderbird MV3 ESR schemas + experiments/schema.json). Don't edit; run `npm run types:update`.
 types/palette.d.ts             Our own shapes for JSDoc: Command, PickerSpec, ActivePicker, PaletteContext, FolderEntry, CommandSourceEntry, …
@@ -151,7 +153,8 @@ experiments/implementation.js  Privileged code wrapping Thunderbird internals.
 icons/icon.svg                 Extension and toolbar icon.
 package.sh                     Builds ../command-palette-<version>.xpi.
 PRIVACY.md                     Privacy policy (shipped; pasted into the ATN listing).
-store/LISTING.md               ATN listing text and notes to reviewer (dev-only, not shipped).
+store/LISTING.md               ATN listing text, notes to reviewer and screenshot list (dev-only, not shipped).
+store/screenshots/             Listing screenshots (1280×800), made by e2e/screenshots.py.
 ```
 
 ### Per-action shortcuts

@@ -167,6 +167,9 @@ html, body {
   text-align: center;
   color: var(--text-dim);
   flex-shrink: 0;
+  /* Icons are single glyphs; clip anything wider instead of wrapping. */
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 #results li.selected .row-icon {
