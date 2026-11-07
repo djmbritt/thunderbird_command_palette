@@ -34,6 +34,7 @@ function fakeElement(init = {}) {
     value: "",
     placeholder: "",
     textContent: "",
+    style: {},
     classList: {
       set: new Set(),
       toggle(c, on) { on ? this.set.add(c) : this.set.delete(c); },
@@ -135,6 +136,7 @@ async function loadPalette({ selected, palette, junkFolders = JUNK_FOLDERS, unif
     console: { ...console, log() {}, warn() {} }, // keep test output clean
     messenger,
     window: { close() { state.closed = true; } },
+    setTimeout, clearTimeout,
     document: { documentElement, getElementById: (id) => els[id], createElement: () => fakeElement() }
   });
   for (const { file, src } of SCRIPTS) vm.runInContext(src, context, { filename: file });

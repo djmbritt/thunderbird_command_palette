@@ -22,7 +22,13 @@ const modeEl = document.getElementById("mode");
 let commands = [];
 let filtered = [];
 let selectedIndex = 0;
-let ctx = { mailTab: null, selectedMessages: [] };
+// Captured once when the palette opens (see captureContext):
+//   mailTab          active 3-pane mail tab of the originating window, or null
+//   windowId         originating window
+//   selectedMessages selected (mail tab) or displayed (message tab) messages
+//   composeTab       active compose tab, or null
+//   composeDetails   compose.getComposeDetails() of composeTab, or null
+let ctx = { mailTab: null, windowId: null, selectedMessages: [], composeTab: null, composeDetails: null };
 
 // MRU (most-recently-used) state. Persisted in storage.local as an ordered
 // array of command ids — index 0 is most recent. Capped at MRU_CAP entries.
@@ -127,7 +133,17 @@ async function captureContext() {
         // Not a message-displaying tab (compose, content tab, …).
       }
     }
-    ctx = { mailTab: mailTab || null, windowId, selectedMessages };
+    let composeTab = null;
+    let composeDetails = null;
+    if (activeTab?.type === "messageCompose") {
+      composeTab = activeTab;
+      try {
+        composeDetails = await messenger.compose.getComposeDetails(activeTab.id);
+      } catch (e) {
+        console.warn("[palette] getComposeDetails failed", e);
+      }
+    }
+    ctx = { mailTab: mailTab || null, windowId, selectedMessages, composeTab, composeDetails };
   } catch (e) {
     console.warn("[palette] captureContext failed", e);
   }
@@ -147,10 +163,12 @@ async function executeAndClose(cmd) {
   } finally {
     // Destructive commands are never recorded, so they can't float to the
     // top of the empty-query list and be fired by a reflexive Enter.
-    if (success && !cmd.destructive) {
+    // `noHistory` items (open tabs, search results) are ephemeral and would
+    // only push useful entries out of the capped MRU list.
+    if (success && !cmd.destructive && !cmd.noHistory) {
       // Persist MRU before closing — popup teardown can race with pending
       // storage writes if not awaited.
-      if (picker) await recordUsage(picker.parent.id);
+      if (picker && !picker.parent.noHistory) await recordUsage(picker.parent.id);
       await recordUsage(cmd.id || cmd.label);
     }
     window.close();
@@ -159,6 +177,25 @@ async function executeAndClose(cmd) {
 
 function updateSelected(props) {
   return Promise.all(ctx.selectedMessages.map(m => messenger.messages.update(m.id, props)));
+}
+
+// Desktop notification confirming an action whose result isn't visible where
+// the user is looking (e.g. messages moved away). Never throws: a failed
+// notification must not turn a successful action into a logged failure.
+async function notify(message) {
+  if (typeof messenger.notifications?.create !== "function") return;
+  try {
+    await messenger.notifications.create({ type: "basic", title: "Command Palette", message });
+  } catch (e) {
+    console.warn("[palette] notification failed", e);
+  }
+}
+
+// Mailbox-format address for compose fields: "Name" <email>. The name is
+// always quoted so commas and other specials in it are safe.
+function mailbox(name, email) {
+  if (!name) return email;
+  return `"${name.replace(/["\\]/g, "\\$&")}" <${email}>`;
 }
 
 // Flat list of navigable folders across all accounts, built once in init().
@@ -296,14 +333,40 @@ async function switchToFolder(folder, { retryProps } = {}) {
 // Discount for matches that only hit a hidden keyword or the hint.
 const KEYWORD_WEIGHT = 0.9;
 
-function filterCommands(query) {
-  const haveMessage = ctx.selectedMessages.length > 0;
+// Query prefixes (root list only), VSCode-style:
+//   >text  commands only (no folders or tags)
+//   @text  folders only        (cmd.kind === "folder")
+//   #text  tags only           (cmd.kind === "tag")
+//   ?text  search messages     (see registerMessageSearch)
+const PREFIX_MODES = { ">": "commands", "@": "folders", "#": "tags", "?": "search" };
+
+function parseQuery(raw) {
+  const mode = !picker && raw ? PREFIX_MODES[raw[0]] : undefined;
+  return mode ? { mode, text: raw.slice(1).trim() } : { mode: null, text: raw };
+}
+
+function matchesMode(cmd, mode) {
+  if (mode === "commands") return !cmd.kind;
+  if (mode === "folders") return cmd.kind === "folder";
+  if (mode === "tags") return cmd.kind === "tag";
+  return true;
+}
+
+// Whether a command's `requires` gate is satisfied by the captured context.
+function isAvailable(cmd) {
+  if (cmd.requires === "message") return ctx.selectedMessages.length > 0;
+  if (cmd.requires === "mailTab") return !!ctx.mailTab;
+  if (cmd.requires === "compose") return !!ctx.composeTab;
+  return true;
+}
+
+function filterCommands(query, mode = null) {
   const isEmpty = !query;
   const scored = [];
 
   for (const cmd of (picker ? picker.items : commands)) {
-    if (cmd.requires === "message" && !haveMessage) continue;
-    if (cmd.requires === "mailTab" && !ctx.mailTab) continue;
+    if (!isAvailable(cmd)) continue;
+    if (!matchesMode(cmd, mode)) continue;
     const cmdId = cmd.id || cmd.label;
 
     if (isEmpty) {
@@ -394,6 +457,7 @@ function render() {
     icon.className = "row-icon";
     icon.setAttribute("aria-hidden", "true");
     icon.textContent = entry.cmd.icon || "•";
+    if (entry.cmd.iconColor) icon.style.color = entry.cmd.iconColor;
 
     const label = document.createElement("span");
     label.className = "row-label";
@@ -406,6 +470,15 @@ function render() {
       hint.className = "row-hint";
       hint.textContent = entry.cmd.hint;
       li.appendChild(hint);
+    }
+
+    // Small pill on the far right, e.g. unread count. May be a getter that
+    // fills in later (counts load after the first render).
+    if (entry.cmd.badge) {
+      const badge = document.createElement("span");
+      badge.className = "row-badge";
+      badge.textContent = entry.cmd.badge;
+      li.appendChild(badge);
     }
 
     // mousemove (not mouseenter) so rows scrolling under a stationary
@@ -482,25 +555,54 @@ function disarm() {
 // Picker mode: a command with `picker` swaps the list for a sub-list (e.g.
 // Move to Folder… → destination folders) instead of running. Esc or
 // Backspace on an empty query returns to the root list.
-let picker = null; // { title, empty, items, parent }
+//
+// `cmd.picker()` returns { title, items, placeholder?, empty? } or a Promise of
+// it (contacts, tags, tabs…). Sync pickers open immediately; async ones show
+// a "Loading…" state first. A late result is dropped if the picker was closed
+// or replaced in the meantime.
+let picker = null; // { title, empty, placeholder, items, parent }
+let pickerToken = 0;
 const ROOT_PLACEHOLDER = queryEl.placeholder;
 const ROOT_EMPTY = emptyEl.textContent;
 
-function openPicker(cmd) {
-  picker = { ...cmd.picker(), parent: cmd };
+function showPicker(spec, cmd) {
+  picker = { ...spec, parent: cmd };
   modeEl.textContent = picker.title;
   modeEl.hidden = false;
-  queryEl.placeholder = "Type a folder name…";
-  emptyEl.textContent = picker.empty || ROOT_EMPTY;
+  queryEl.placeholder = picker.placeholder || "Type to filter…";
   queryEl.value = "";
   refilter();
 }
 
+function openPicker(cmd) {
+  const token = ++pickerToken;
+  let result;
+  try {
+    result = cmd.picker();
+  } catch (e) {
+    console.error("[palette] picker failed", e);
+    result = { title: cmd.label, empty: "Couldn't load items.", items: [] };
+  }
+  if (typeof result?.then !== "function") {
+    showPicker(result, cmd);
+    return;
+  }
+  showPicker({ title: cmd.label, empty: "Loading…", items: [] }, cmd);
+  result
+    .catch((e) => {
+      console.error("[palette] picker failed", e);
+      return { title: cmd.label, empty: "Couldn't load items.", items: [] };
+    })
+    .then((spec) => {
+      if (token === pickerToken && picker?.parent === cmd) showPicker(spec, cmd);
+    });
+}
+
 function closePicker() {
+  pickerToken++;
   picker = null;
   modeEl.hidden = true;
   queryEl.placeholder = ROOT_PLACEHOLDER;
-  emptyEl.textContent = ROOT_EMPTY;
   queryEl.value = "";
   refilter();
 }
@@ -520,10 +622,61 @@ function execSelected() {
   executeAndClose(entry.cmd);
 }
 
+// Message search (the "?" prefix) is provided by popup/commands/search.js via
+// registerMessageSearch(fn); fn(text) resolves to an array of commands.
+// Searches are debounced, and a result is dropped if the query moved on.
+let messageSearch = null;
+let searchTimer = null;
+let searchSeq = 0;
+const SEARCH_DEBOUNCE_MS = 250;
+const SEARCH_MIN_CHARS = 2;
+
+function registerMessageSearch(fn) {
+  messageSearch = fn;
+}
+
+function setEmptyText(text) {
+  emptyEl.textContent = text;
+}
+
+function startSearch(text) {
+  clearTimeout(searchTimer);
+  const seq = ++searchSeq;
+  filtered = [];
+  if (!messageSearch) {
+    setEmptyText("Message search is unavailable.");
+  } else if (text.length < SEARCH_MIN_CHARS) {
+    setEmptyText("Search messages: type a subject or sender…");
+  } else {
+    setEmptyText("Searching…");
+    searchTimer = setTimeout(async () => {
+      let results = [];
+      try {
+        results = await messageSearch(text);
+      } catch (e) {
+        console.error("[palette] message search failed", e);
+      }
+      if (seq !== searchSeq) return; // query changed meanwhile
+      filtered = results.map(cmd => ({ cmd, score: 0, positions: [] }));
+      selectedIndex = 0;
+      setEmptyText("No matching messages.");
+      render();
+    }, SEARCH_DEBOUNCE_MS);
+  }
+}
+
 function refilter() {
-  filtered = filterCommands(queryEl.value.trim());
+  const { mode, text } = parseQuery(queryEl.value.trim());
   selectedIndex = 0;
   armedCmd = null;
+  if (mode === "search") {
+    startSearch(text);
+  } else {
+    searchSeq++; // cancel any in-flight search
+    clearTimeout(searchTimer);
+    setEmptyText(picker ? (picker.empty || "No matches.") : ROOT_EMPTY);
+    filtered = filterCommands(text, mode);
+  }
   render();
 }
 
@@ -580,16 +733,50 @@ async function buildCommands(env) {
   return lists.flat();
 }
 
+// ---- Shortcut-launched commands ---------------------------------------------
+//
+// background.js opens the popup for per-action shortcuts (manifest
+// `commands`) and holds the requested action until the popup asks for it.
+async function takePendingCommand() {
+  if (typeof messenger.runtime?.sendMessage !== "function") return null;
+  try {
+    return (await messenger.runtime.sendMessage({ type: "palette:takePending" })) || null;
+  } catch {
+    return null; // no background listener (e.g. opened normally)
+  }
+}
+
+// "repeat-last" runs the most recent MRU command that's available here;
+// anything else is a command id to run (or open, for pickers). Destructive
+// commands are skipped for repeat: a shortcut must never fire them unseen.
+function runPendingCommand(pending) {
+  const available = filterCommands("", null); // MRU-ordered, gates applied
+  let index = -1;
+  if (pending === "repeat-last") {
+    index = available.findIndex(e => mruRank.has(e.cmd.id || e.cmd.label) && !e.cmd.destructive);
+  } else {
+    index = available.findIndex(e => e.cmd.id === pending);
+  }
+  if (index === -1) return false;
+  filtered = available;
+  selectedIndex = index;
+  render();
+  execSelected();
+  return true;
+}
+
 // Called from popup/main.js once every command file has registered.
 async function init() {
-  const [, accounts] = await Promise.all([
+  const [, accounts, , , pending] = await Promise.all([
     loadMru(),
     messenger.accounts.list(true),
     captureContext(),
-    applyUIFontSize() // before first render, so the popup doesn't jump in size
+    applyUIFontSize(), // before first render, so the popup doesn't jump in size
+    takePendingCommand()
   ]);
   folderEntries = collectFolders(accounts);
   commands = await buildCommands({ accounts });
   refilter();
   queryEl.focus();
+  if (pending) runPendingCommand(pending);
 }

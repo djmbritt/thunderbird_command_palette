@@ -126,6 +126,7 @@ registerCommands(() => [
     picker: () => ({
       title: `Move ${selectionText()} to…`,
       empty: "No matching folders.",
+      placeholder: "Type a folder name…",
       items: destinationItems("move", (ids, f) => messenger.messages.move(ids, f), { excludeSource: true })
     })
   },
@@ -138,6 +139,7 @@ registerCommands(() => [
     picker: () => ({
       title: `Copy ${selectionText()} to…`,
       empty: "No matching folders.",
+      placeholder: "Type a folder name…",
       items: destinationItems("copy", (ids, f) => messenger.messages.copy(ids, f), { excludeSource: false })
     })
   },
