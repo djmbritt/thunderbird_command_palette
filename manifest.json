@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Command Palette",
   "description": "A VS Code-style command palette for Thunderbird. Press Ctrl+Shift+P, type a few letters, press Enter: reply, archive, move or tag messages, jump to any folder, change the view, compose, search, and more without the mouse.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": "David Britt",
   "homepage_url": "https://github.com/djmbritt/thunderbird_command_palette",
   "icons": {
