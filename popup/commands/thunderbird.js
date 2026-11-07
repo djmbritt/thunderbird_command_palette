@@ -44,6 +44,16 @@ function buildExperimentCommands(accounts) {
     run: () => messenger.palette.openAccountSettings()
   });
 
+  if (typeof messenger.palette.openAddonsManager === "function") {
+    out.push({
+      id: "open-addons-manager",
+      label: "Open Add-ons and Themes",
+      icon: "🧩",
+      keywords: "addons extensions plugins themes manager install",
+      run: () => messenger.palette.openAddonsManager()
+    });
+  }
+
   return out;
 }
 

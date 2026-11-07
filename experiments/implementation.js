@@ -304,6 +304,18 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
           throw new ExtensionError("Account Settings cannot be opened on this Thunderbird version");
         },
 
+        async openAddonsManager() {
+          const win = getMainWindow();
+          if (!win) throw new ExtensionError("No Thunderbird main window available");
+          // What Tools → Add-ons and Themes runs: switches to an open Add-ons
+          // tab, or opens one. Not awaited: it resolves once the page loads,
+          // and the palette shouldn't wait for that.
+          if (typeof win.openAddonsMgr !== "function") {
+            throw new ExtensionError("Add-ons and Themes cannot be opened on this Thunderbird version");
+          }
+          win.openAddonsMgr();
+        },
+
         async listAddonCommands() {
           const lists = await Promise.all(otherAddons(context.extension.id).map(addonCommands));
           return lists.flat();

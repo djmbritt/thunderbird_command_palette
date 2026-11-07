@@ -670,3 +670,14 @@ test("no add-on commands without the experiment function", async () => {
   p.type("external editor");
   assert.ok(!p.labels().some(l => l.startsWith("External Editor:")));
 });
+
+test("Open Add-ons and Themes uses the experiment", async () => {
+  const calls = [];
+  const rec = (name) => async (...a) => { calls.push([name, ...a]); };
+  const p = await loadPalette({ selected: [], palette: { ...experiment(rec), openAddonsManager: rec("openAddonsManager") } });
+  p.type("add-ons");
+  assert.equal(p.labels()[0], "Open Add-ons and Themes");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(calls, [["openAddonsManager"]]);
+});

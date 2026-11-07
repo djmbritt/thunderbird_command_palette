@@ -30,7 +30,7 @@ Text to paste into the ATN listing and submission forms. Not shipped in the
 > - **View:** quick filters, sort by any column, threaded or unthreaded, show or hide the folder and message panes, Classic / Wide / Vertical layout.
 > - **Navigation:** switch to any open tab, write to a contact, open Calendar, Tasks, Chat or the Address Book, toggle the Today pane.
 > - **While composing:** Send Later, save as draft or template, change the sending identity, set priority, request receipts.
-> - **Undo / Redo**, Get New Mail, Settings and Account Settings.
+> - **Undo / Redo**, Get New Mail, Settings, Account Settings and Add-ons and Themes.
 > - **Other add-ons:** run any other add-on's shortcut commands and click its toolbar, compose or message buttons from the palette.
 >
 > **Fast to use**
@@ -58,7 +58,7 @@ How to test: press Ctrl+Shift+P (or click the toolbar button), type to filter, E
 
 Why an Experiment (experiments/implementation.js): each function covers something no MailExtension API provides:
 - getNewMail: trigger Get New Messages.
-- openSettings / openAccountSettings: open Thunderbird's Settings and Account Settings.
+- openSettings / openAccountSettings / openAddonsManager: open Thunderbird's Settings, Account Settings and Add-ons and Themes.
 - runCommand: only an allowlist of built-in commands (undo, redo, compact, expand/collapse threads, print, view source); anything else is rejected.
 - toggleTodayPane: show/hide the Today pane.
 - openSpace: open a built-in space (allowlisted); spaces.open only opens the extension's own spaces.

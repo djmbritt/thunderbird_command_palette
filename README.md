@@ -22,7 +22,7 @@ The missing command palette for Thunderbird. Press <kbd>Ctrl</kbd>+<kbd>Shift</k
   - show or hide the folder and message panes, Classic / Wide / Vertical layout.
 - **Navigation:** *Switch to Tab…*, *Write to…* a contact, open Calendar / Tasks / Chat / Address Book, toggle the Today pane.
 - **In a compose window:** Send Later, Save as Draft or Template, *Send from…* another identity, set priority, request return or delivery receipts.
-- **Undo / Redo**, Get New Mail, and quick access to Settings and Account Settings.
+- **Undo / Redo**, Get New Mail, and quick access to Settings, Account Settings and Add-ons and Themes.
 - **Other add-ons' commands:** every keyboard-shortcut command your other add-ons offer, and their toolbar, compose and message buttons, listed as *Add-on name: command*.
 - Follows Thunderbird's **light/dark theme** and **font size**.
 

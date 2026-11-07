@@ -337,6 +337,18 @@ def other_addon_commands(tb):
 
 
 @test
+def open_addons_manager(tb):
+    tb.js("""
+      await run("add-ons and themes", "Open Add-ons and Themes");
+      const tabmail = W().gTabmail;
+      const tab = await until(() => tabmail.tabInfo.find(t => String(t.browser?.currentURI?.spec).startsWith("about:addons")),
+        "an Add-ons and Themes tab");
+      tabmail.closeTab(tab);
+      tabmail.switchToTab(0);
+    """)
+
+
+@test
 def write_to_contact(tb):
     return tb.js("""
       const dir = MailServices.ab.getDirectory("jsaddrbook://abook.sqlite");

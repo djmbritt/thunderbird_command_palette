@@ -9039,6 +9039,10 @@ declare namespace messenger {
        */
       openSpace(name: string): Promise<any>;
       /**
+       * Open Thunderbird's Add-ons and Themes page in a tab (or switch to it if it's already open).
+       */
+      openAddonsManager(): Promise<any>;
+      /**
        * List the commands of the other running add-ons: every keyboard-shortcut command each declares (as in Manage Extension Shortcuts) and its toolbar, compose and message toolbar buttons. Resolves to an array of { extensionId, extensionName, command, label, shortcut, kind }, where kind is command, action, composeAction or messageDisplayAction.
        */
       listAddonCommands(): Promise<any>;

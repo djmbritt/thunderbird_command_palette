@@ -78,6 +78,13 @@
         ]
       },
       {
+        "name": "openAddonsManager",
+        "type": "function",
+        "async": true,
+        "description": "Open Thunderbird's Add-ons and Themes page in a tab (or switch to it if it's already open).",
+        "parameters": []
+      },
+      {
         "name": "listAddonCommands",
         "type": "function",
         "async": true,
