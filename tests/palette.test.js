@@ -62,7 +62,7 @@ function folder(id, name, extra = {}) {
 }
 
 // Load a fresh palette with the given selection. Returns helpers to drive it.
-async function loadPalette({ selected, palette, unifiedInbox = UNIFIED_INBOX, mailTabsUpdate, extraFolders = [] } = {}) {
+async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdate, extraFolders = [] } = {}) {
   const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"] });
   const projects = folder("a1://Projects", "Projects");
   const savedSearch = folder("a1://Saved", "Saved Search", { isVirtual: true });
@@ -88,7 +88,10 @@ async function loadPalette({ selected, palette, unifiedInbox = UNIFIED_INBOX, ma
     },
     tabs: { query: async () => [{ id: 1, windowId: 10 }], update: async () => {} },
     windows: { getAll: async () => [{ id: 10, focused: true }] },
-    folders: unifiedInbox === null ? {} : { getUnifiedFolder: async (type) => (type === "inbox" ? unifiedInbox : null) },
+    // `unified`: type -> folder (missing = null), a function, or null for "API unavailable".
+    folders: unified === null ? {} : {
+      getUnifiedFolder: typeof unified === "function" ? unified : async (type) => unified[type] ?? null
+    },
     mailTabs: {
       query: async () => [{ id: 1, windowId: 10 }],
       update: async (...args) => {
@@ -137,7 +140,9 @@ async function loadPalette({ selected, palette, unifiedInbox = UNIFIED_INBOX, ma
   return { els, calls, store, state, documentElement, key, type, labels, selectedLabel };
 }
 
-const UNIFIED_INBOX = { id: "unified-inbox-id", name: "Inbox", isUnified: true, specialUse: ["inbox"] };
+const unifiedFolder = (type) => ({ id: `unified-${type}-id`, name: type, isUnified: true, specialUse: [type] });
+const UNIFIED_INBOX = unifiedFolder("inbox");
+const UNIFIED = { inbox: UNIFIED_INBOX, sent: unifiedFolder("sent"), trash: unifiedFolder("trash") };
 
 const settle = () => new Promise(r => setTimeout(r, 10));
 
@@ -282,9 +287,9 @@ test("without the experiment the CSS default font size is kept", async () => {
   assert.equal(p.labels()[0], "Move to Folder…", "palette still works");
 });
 
-test("Go to: Unified Inbox ranks first for 'unified' and opens it", async () => {
+test("Go to: Unified Inbox ranks first for 'unified inbox' and opens it", async () => {
   const p = await loadPalette({ selected: [] });
-  p.type("unified");
+  p.type("unified inbox");
   assert.equal(p.labels()[0], "Go to: Unified Inbox");
   p.key("Enter");
   await settle();
@@ -316,7 +321,7 @@ test("Unified Inbox retries with folderMode 'unified' if the plain update is rej
 });
 
 test("no Unified Inbox command when the API is unavailable", async () => {
-  const p = await loadPalette({ selected: [], unifiedInbox: null });
+  const p = await loadPalette({ selected: [], unified: null });
   p.type("unified");
   assert.ok(!p.labels().includes("Go to: Unified Inbox"));
 });
@@ -326,4 +331,35 @@ test("unified folders inside an account tree are not listed twice", async () => 
   p.type(""); // full, unfiltered list
   assert.equal(p.labels().filter(l => l === "Go to: Unified Inbox").length, 1);
   assert.equal(p.labels().filter(l => l === "Go to: Inbox").length, 1, "only the real account Inbox");
+});
+
+test("a Go to: Unified command is listed for each available unified folder", async () => {
+  const p = await loadPalette({ selected: [] });
+  p.type("");
+  assert.deepEqual(
+    p.labels().filter(l => l.startsWith("Go to: Unified")),
+    ["Go to: Unified Inbox", "Go to: Unified Sent", "Go to: Unified Trash"]
+  );
+});
+
+test("Go to: Unified Sent opens the unified Sent folder", async () => {
+  const p = await loadPalette({ selected: [] });
+  p.type("unified sent");
+  assert.equal(p.labels()[0], "Go to: Unified Sent");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { displayedFolderId: "unified-sent-id" }]]);
+  assert.deepEqual(p.store.mru, ["goto-unified-sent"]);
+});
+
+test("one failing unified type doesn't hide the others", async () => {
+  const p = await loadPalette({
+    selected: [],
+    unified: async (type) => {
+      if (type === "drafts") throw new Error("not supported");
+      return UNIFIED[type] ?? null;
+    }
+  });
+  p.type("");
+  assert.equal(p.labels().filter(l => l.startsWith("Go to: Unified")).length, 3);
 });

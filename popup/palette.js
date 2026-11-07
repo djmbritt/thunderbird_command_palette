@@ -388,27 +388,43 @@ function buildFolderCommands(entries) {
   }));
 }
 
-// "Go to: Unified Inbox". folders.getUnifiedFolder (TB 127+) returns the
-// cross-account aggregate folder; it has no accountId and isn't part of any
-// account's folder tree. Skipped silently if unavailable.
+// "Go to: Unified <folder>" commands. folders.getUnifiedFolder (TB 127+)
+// returns the cross-account aggregate for a special-use type; these have no
+// accountId and aren't part of any account's folder tree. Types are the ones
+// getUnifiedFolder documents, in the order they're listed in the palette.
+const UNIFIED_TYPES = [
+  { type: "inbox", name: "Inbox", keywords: "all inboxes combined" },
+  { type: "drafts", name: "Drafts", keywords: "" },
+  { type: "sent", name: "Sent", keywords: "outgoing" },
+  { type: "archives", name: "Archives", keywords: "archive" },
+  { type: "templates", name: "Templates", keywords: "" },
+  { type: "junk", name: "Junk", keywords: "spam" },
+  { type: "trash", name: "Trash", keywords: "deleted bin" }
+];
+
 async function buildUnifiedCommands() {
   if (typeof messenger.folders?.getUnifiedFolder !== "function") return [];
-  try {
-    const folder = await messenger.folders.getUnifiedFolder("inbox");
-    if (!folder) return [];
-    return [{
-      id: "goto-unified-inbox", // stable: unified folder ids are per-session
-      label: "Go to: Unified Inbox",
+  const results = await Promise.all(UNIFIED_TYPES.map(async (u) => {
+    try {
+      return { ...u, folder: await messenger.folders.getUnifiedFolder(u.type) };
+    } catch (e) {
+      // One unavailable type shouldn't hide the others.
+      console.warn(`[palette] getUnifiedFolder(${u.type}) failed`, e);
+      return { ...u, folder: null };
+    }
+  }));
+  return results
+    .filter(r => r.folder)
+    .map(({ type, name, keywords, folder }) => ({
+      // Stable id for MRU: unified folder ids are only valid per-session.
+      id: `goto-unified-${type}`,
+      label: `Go to: Unified ${name}`,
       nameStart: "Go to: ".length,
       hint: "All accounts",
-      icon: "📥",
-      keywords: "unified all inboxes combined smart",
+      icon: specialIcon([type]),
+      keywords: `unified all accounts smart ${type} ${keywords}`,
       run: () => switchToFolder(folder, { retryProps: { folderMode: "unified" } })
-    }];
-  } catch (e) {
-    console.warn("[palette] getUnifiedFolder failed", e);
-    return [];
-  }
+    }));
 }
 
 function selectionText() {
