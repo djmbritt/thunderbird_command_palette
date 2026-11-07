@@ -59,6 +59,9 @@ These shortcuts open the palette through its toolbar button, so keep the button 
 
 Requires **Thunderbird 128 or newer**.
 
+1. Download the latest `command-palette-<version>.xpi` from the [Releases page](https://github.com/djmbritt/thunderbird_command_palette/releases/latest).
+2. In Thunderbird, open **Tools → Add-ons and Themes**, click **⚙ → Install Add-on From File…** and choose the downloaded file.
+
 ### Try it without installing
 
 1. Open **Tools → Add-ons and Themes**, click **⚙ → Debug Add-ons**.
@@ -66,7 +69,7 @@ Requires **Thunderbird 128 or newer**.
 
 A temporary add-on is removed when Thunderbird quits.
 
-### Install permanently
+### Build it yourself
 
 ```bash
 ./package.sh
@@ -93,13 +96,3 @@ npm run test:e2e     # run the palette in a real Thunderbird (throwaway profile;
 ```
 
 After loading the add-on temporarily, click **Reload** on the Debug Add-ons page after each change. [`CLAUDE.md`](CLAUDE.md) covers the architecture, how to add a command, and debugging tips.
-
-## TODO
-
-- [x] add an icon
-- [x] verify in Thunderbird: Filter: Clear, Write to…, Calendar/Tasks/Chat, Today pane, Undo, Print, View Source, Go to Tag and the extra shortcuts (`npm run test:e2e`, Thunderbird 158)
-- [x] Undo can undo moves made from the palette (Thunderbird 140+)
-- [ ] try it on Thunderbird 128 ESR (the e2e tests only cover the installed version)
-- [x] take the listing screenshots (`store/screenshots/`)
-- [x] choose the release version (1.0.0)
-- [ ] publish on addons.thunderbird.net
