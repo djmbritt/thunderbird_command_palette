@@ -9,12 +9,14 @@
 async function markAsJunkAndMove() {
   await updateSelected({ junk: true });
 
+  /** @type {Map<string, messenger.messages.MessageHeader[]>} */
   const byAccount = new Map();
   for (const m of ctx.selectedMessages) {
     const accountId = m.folder?.accountId;
     if (!accountId) continue;
-    if (!byAccount.has(accountId)) byAccount.set(accountId, []);
-    byAccount.get(accountId).push(m);
+    const list = byAccount.get(accountId) ?? [];
+    list.push(m);
+    byAccount.set(accountId, list);
   }
 
   await Promise.all([...byAccount].map(async ([accountId, msgs]) => {
@@ -23,7 +25,7 @@ async function markAsJunkAndMove() {
       console.warn(`[palette] account ${accountId} has no Junk folder; marked as junk without moving`);
       return;
     }
-    const ids = msgs.filter(m => m.folder.id !== junkFolder.id).map(m => m.id);
+    const ids = msgs.filter(m => m.folder?.id !== junkFolder.id).map(m => m.id);
     if (ids.length > 0) await messenger.messages.move(ids, junkFolder.id);
   }));
   await notify(`Marked ${selectionText()} as junk`);

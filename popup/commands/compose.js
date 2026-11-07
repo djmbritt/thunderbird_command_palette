@@ -15,8 +15,11 @@ const PRIORITIES = [
   { value: "lowest", name: "Lowest" }
 ];
 
+// Tab id of the captured compose tab, for `requires: "compose"` commands.
 function composeTabId() {
-  return ctx.composeTab.id;
+  const id = ctx.composeTab?.id;
+  if (id === undefined) throw new Error("The palette wasn't opened from a compose window");
+  return id;
 }
 
 /** @returns {Promise<PickerSpec>} */
@@ -31,7 +34,7 @@ async function identityPicker() {
       .sort((a, b) => (a.email || "").localeCompare(b.email || ""))
       .map(id => ({
         id: `compose-identity:${id.id}`,
-        label: mailbox(id.name, id.email).replace(/^"([^"]*)"/, "$1"),
+        label: mailbox(id.name, id.email || "").replace(/^"([^"]*)"/, "$1"),
         hint: [id.label, id.id === current ? "current" : null].filter(Boolean).join(" · ") || undefined,
         icon: "☺",
         keywords: `${id.email} ${id.label || ""}`,
@@ -57,7 +60,10 @@ function priorityPicker() {
 }
 
 // Toggle commands whose label reflects the captured compose state.
-/** @returns {Command} */
+/**
+ * @param {{ id: string, prop: "returnReceipt" | "deliveryStatusNotification", on: string, off: string, icon: string, keywords: string }} spec
+ * @returns {Command}
+ */
 function toggleCommand({ id, prop, on, off, icon, keywords }) {
   return {
     id,

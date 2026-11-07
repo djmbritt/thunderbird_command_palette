@@ -23,12 +23,19 @@ function isTimingEnabled() {
   }
 }
 
+/** @param {boolean} on */
 function setTimingEnabled(on) {
   if (on) localStorage.setItem(TIMING_ENABLED_KEY, "1");
   else localStorage.removeItem(TIMING_ENABLED_KEY);
 }
 
+/**
+ * @typedef {{ start: number, end: number }} TimingStep
+ * @typedef {{ at: string, scriptsStart: number, steps: Record<string, TimingStep>, counts: Record<string, number> }} TimingRun
+ */
+
 const Timing = {
+  /** @type {TimingRun} */
   run: {
     at: new Date().toISOString(),
     scriptsStart: Math.round(performance.now()), // HTML parsed, libs loaded
@@ -36,7 +43,13 @@ const Timing = {
     counts: {}
   },
 
-  // Time a promise or async function under `name`. Returns its result.
+  /**
+   * Time a promise or async function under `name`. Returns its result.
+   * @template T
+   * @param {string} name
+   * @param {Promise<T> | (() => T | Promise<T>)} work
+   * @returns {Promise<T>}
+   */
   async time(name, work) {
     const start = performance.now();
     try {
@@ -46,7 +59,13 @@ const Timing = {
     }
   },
 
-  // Time a synchronous function under `name`. Returns its result.
+  /**
+   * Time a synchronous function under `name`. Returns its result.
+   * @template T
+   * @param {string} name
+   * @param {() => T} fn
+   * @returns {T}
+   */
   timeSync(name, fn) {
     const start = performance.now();
     try {
@@ -56,21 +75,31 @@ const Timing = {
     }
   },
 
+  /** @param {string} name */
   mark(name) {
     const t = Math.round(performance.now());
     this.run.steps[name] = { start: t, end: t };
   },
 
+  /** @param {string} name */
   count(name, n = 1) {
     this.run.counts[name] = (this.run.counts[name] || 0) + n;
   },
 
+  /**
+   * @param {string} name
+   * @param {number} n
+   */
   set(name, n) {
     this.run.counts[name] = n;
   },
 
-  // Human-readable summary, slowest steps first.
-  summary(run = this.run) {
+  /**
+   * Human-readable summary, slowest steps first.
+   * @param {TimingRun} [run]
+   */
+  summary(run) {
+    run ??= this.run;
     const steps = Object.entries(run.steps)
       .map(([name, s]) => ({ name, ms: s.end - s.start, end: s.end }))
       .sort((a, b) => b.ms - a.ms);
@@ -87,7 +116,7 @@ const Timing = {
   async save() {
     try {
       const { startupTimings = [] } = await messenger.storage.local.get("startupTimings");
-      const runs = startupTimings.filter(r => r.at !== this.run.at);
+      const runs = startupTimings.filter((/** @type {TimingRun} */ r) => r.at !== this.run.at);
       runs.unshift(JSON.parse(JSON.stringify(this.run)));
       await messenger.storage.local.set({ startupTimings: runs.slice(0, TIMING_RUNS_KEPT) });
     } catch (e) {
@@ -118,6 +147,7 @@ const Timing = {
     await this.save();
   },
 
+  /** @param {string} name */
   async reportLate(name) {
     if (!isTimingEnabled()) return;
     const s = this.run.steps[name];

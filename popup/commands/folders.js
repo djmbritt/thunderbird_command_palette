@@ -42,6 +42,12 @@ function displayedFolder() {
   return ctx.mailTab?.displayedFolder || null;
 }
 
+function requireDisplayedFolder() {
+  const folder = displayedFolder();
+  if (!folder) throw new Error("No folder is displayed");
+  return folder;
+}
+
 /** @returns {Command[]} */
 function currentFolderCommands() {
   return [
@@ -54,7 +60,7 @@ function currentFolderCommands() {
       icon: "●",
       keywords: "mark all read folder catch up",
       requires: "mailTab",
-      run: () => messenger.folders.markAsRead(displayedFolder().id)
+      run: () => messenger.folders.markAsRead(requireDisplayedFolder().id)
     },
     {
       id: "folder-toggle-favorite",
@@ -67,7 +73,10 @@ function currentFolderCommands() {
       icon: "☆",
       keywords: "favorite favourite star pin folder",
       requires: "mailTab",
-      run: () => messenger.folders.update(displayedFolder().id, { isFavorite: !displayedFolder().isFavorite })
+      run: () => {
+        const folder = requireDisplayedFolder();
+        return messenger.folders.update(folder.id, { isFavorite: !folder.isFavorite });
+      }
     }
   ];
 }
@@ -99,9 +108,7 @@ async function buildUnifiedCommands() {
       return { ...u, folder: null };
     }
   }));
-  return results
-    .filter(r => r.folder)
-    .map(({ type, name, keywords, folder }) => ({
+  return results.flatMap(({ type, name, keywords, folder }) => (!folder ? [] : [{
       // Stable id for MRU: unified folder ids are only valid per-session.
       id: `goto-unified-${type}`,
       label: `Go to: Unified ${name}`,
@@ -111,7 +118,7 @@ async function buildUnifiedCommands() {
       keywords: `unified all accounts smart ${type} ${keywords}`,
       kind: "folder",
       run: () => switchToFolder(folder, { retryProps: { folderMode: "unified" } })
-    }));
+    }]));
 }
 
 registerCommands(() => [

@@ -5,6 +5,7 @@
 
 // ---- Switch to Tab… --------------------------------------------------------
 
+/** @type {Record<string, string>} */
 const TAB_TYPE_LABELS = {
   mail: "Mail",
   messageDisplay: "Message",
@@ -28,15 +29,15 @@ async function tabPicker() {
     empty: "No matching tabs.",
     items: tabs.map(t => ({
       id: `tab:${t.id}`,
-      label: t.title || TAB_TYPE_LABELS[t.type] || "Untitled",
-      hint: [TAB_TYPE_LABELS[t.type], t.active && t.windowId === ctx.windowId ? "current" : null]
+      label: t.title || TAB_TYPE_LABELS[t.type ?? ""] || "Untitled",
+      hint: [TAB_TYPE_LABELS[t.type ?? ""], t.active && t.windowId === ctx.windowId ? "current" : null]
         .filter(Boolean).join(" · "),
       icon: "▭",
       keywords: t.type || "",
       noHistory: true, // tab ids don't survive a restart
       run: async () => {
-        await messenger.tabs.update(t.id, { active: true });
-        await messenger.windows.update(t.windowId, { focused: true });
+        if (t.id !== undefined) await messenger.tabs.update(t.id, { active: true });
+        if (t.windowId !== undefined) await messenger.windows.update(t.windowId, { focused: true });
       }
     }))
   };

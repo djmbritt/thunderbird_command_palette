@@ -15,9 +15,10 @@
 //   5. Esc closes without executing; outside click closes natively.
 
 const queryEl = /** @type {HTMLInputElement} */ (document.getElementById("query"));
-const resultsEl = document.getElementById("results");
-const emptyEl = document.getElementById("empty");
-const modeEl = document.getElementById("mode");
+// palette.html always has these elements.
+const resultsEl = /** @type {HTMLElement} */ (document.getElementById("results"));
+const emptyEl = /** @type {HTMLElement} */ (document.getElementById("empty"));
+const modeEl = /** @type {HTMLElement} */ (document.getElementById("mode"));
 
 /** @type {Command[]} */
 let commands = [];
@@ -36,8 +37,10 @@ let ctx = { mailTab: null, windowId: null, selectedMessages: [], composeTab: nul
 // MRU (most-recently-used) state. Persisted in storage.local as an ordered
 // array of command ids — index 0 is most recent. Capped at MRU_CAP entries.
 const MRU_CAP = 50;
+/** @type {string[]} */
 let mruList = [];
-let mruRank = new Map(); // id -> position (0 = most recent)
+/** @type {Map<string, number>} id -> position (0 = most recent) */
+let mruRank = new Map();
 
 async function loadMru() {
   try {
@@ -55,6 +58,7 @@ function rebuildMruRank() {
   mruList.forEach((id, i) => mruRank.set(id, i));
 }
 
+/** @param {string | undefined} id */
 async function recordUsage(id) {
   if (!id) return;
   mruList = [id, ...mruList.filter(x => x !== id)].slice(0, MRU_CAP);
@@ -69,6 +73,7 @@ async function recordUsage(id) {
 // MRU boost for non-empty queries: small tie-breaker only, never overrides
 // a clearly-better fuzzy match. Top-of-MRU gets ~0.5; decays linearly to 0
 // by rank 20. Tuned against fuzzy scores which typically range 1–20.
+/** @param {string} id */
 function mruBoost(id) {
   if (!id) return 0;
   const rank = mruRank.get(id);
@@ -82,6 +87,10 @@ const HAS_EXPERIMENT = typeof messenger.palette?.getNewMail === "function";
 
 // Flatten a paginated MessageList (or a plain array, which some APIs/versions
 // return) into a single array of MessageHeaders.
+/**
+ * @param {messenger.messages.MessageList | messenger.messages.MessageHeader[] | null | undefined} list
+ * @returns {Promise<messenger.messages.MessageHeader[]>}
+ */
 async function collectMessages(list) {
   if (!list) return [];
   if (Array.isArray(list)) return list;
@@ -129,6 +138,7 @@ async function captureContext() {
     const [mailTab] = await Timing.time("context: mailTabs.query",
       messenger.mailTabs.query({ active: true, currentWindow: true }));
 
+    /** @type {messenger.messages.MessageHeader[]} */
     let selectedMessages = [];
     if (mailTab) {
       try {
@@ -148,7 +158,7 @@ async function captureContext() {
     }
     let composeTab = null;
     let composeDetails = null;
-    if (activeTab?.type === "messageCompose") {
+    if (activeTab?.type === "messageCompose" && activeTab.id !== undefined) {
       composeTab = activeTab;
       try {
         composeDetails = await Timing.time("context: compose details",
@@ -164,14 +174,22 @@ async function captureContext() {
   }
 }
 
+// The captured mail tab, for commands gated with `requires: "mailTab"`
+// (which are hidden when there is none).
+function requireMailTab() {
+  if (!ctx.mailTab) throw new Error("The palette wasn't opened from a mail tab");
+  return ctx.mailTab;
+}
+
 function firstSelectedId() {
   return ctx.selectedMessages[0]?.id ?? null;
 }
 
+/** @param {Command} cmd */
 async function executeAndClose(cmd) {
   let success = false;
   try {
-    await cmd.run();
+    await cmd.run?.();
     success = true;
   } catch (e) {
     console.error(`Action failed: ${cmd.id || cmd.label}`, e);
@@ -190,6 +208,7 @@ async function executeAndClose(cmd) {
   }
 }
 
+/** @param {Parameters<typeof messenger.messages.update>[1]} props */
 function updateSelected(props) {
   return Promise.all(ctx.selectedMessages.map(m => messenger.messages.update(m.id, props)));
 }
@@ -197,6 +216,7 @@ function updateSelected(props) {
 // Desktop notification confirming an action whose result isn't visible where
 // the user is looking (e.g. messages moved away). Never throws: a failed
 // notification must not turn a successful action into a logged failure.
+/** @param {string} message */
 async function notify(message) {
   if (typeof messenger.notifications?.create !== "function") return;
   try {
@@ -208,6 +228,10 @@ async function notify(message) {
 
 // Mailbox-format address for compose fields: "Name" <email>. The name is
 // always quoted so commas and other specials in it are safe.
+/**
+ * @param {string | undefined} name
+ * @param {string} email
+ */
 function mailbox(name, email) {
   if (!name) return email;
   return `"${name.replace(/["\\]/g, "\\$&")}" <${email}>`;
@@ -223,8 +247,14 @@ let folderEntries = [];
  * @returns {FolderEntry[]}
  */
 function collectFolders(accounts) {
+  /** @type {FolderEntry[]} */
   const out = [];
 
+  /**
+   * @param {messenger.folders.MailFolder} folder
+   * @param {string} accountName
+   * @param {string} parentPath
+   */
   function walk(folder, accountName, parentPath) {
     // Skip the account root — it's not navigable in the 3-pane and the API
     // marks it explicitly with isRoot. (Older builds may not set isRoot;
@@ -285,6 +315,7 @@ function destinationItems(verb, transfer, { excludeSource }) {
     }));
 }
 
+/** @param {string[] | undefined} specialUse */
 function specialIcon(specialUse) {
   if (!specialUse || specialUse.length === 0) return "▸";
   if (specialUse.includes("inbox")) return "📥";
@@ -322,17 +353,18 @@ async function switchToFolder(folder, { retryProps } = {}) {
 
   const mailTabs = await messenger.mailTabs.query({ windowId: targetWindow.id });
   // MV3 MailTab objects carry the tab id as `tabId` (MV2 used `id`).
+  const originTabId = ctx.mailTab?.tabId;
   const mailTab =
-    (ctx.mailTab && mailTabs.find(t => t.tabId === ctx.mailTab.tabId)) ||
+    (originTabId !== undefined && mailTabs.find(t => t.tabId === originTabId)) ||
     mailTabs.find(t => t.active) ||
     mailTabs[0] ||
     null;
 
   // mailTabs.create() has no windowId (MV3 rejects unknown properties) and
   // opens the tab in the focused window, so focus the target window first.
-  const openInNewMailTab = async (windowId) => {
+  const openInNewMailTab = async (/** @type {number | undefined} */ windowId) => {
     try {
-      await messenger.windows.update(windowId, { focused: true });
+      if (windowId !== undefined) await messenger.windows.update(windowId, { focused: true });
     } catch (e) {
       console.warn("[palette] windows.update focused failed", e);
     }
@@ -381,13 +413,23 @@ const KEYWORD_WEIGHT = 0.9;
 //   @text  folders only        (cmd.kind === "folder")
 //   #text  tags only           (cmd.kind === "tag")
 //   ?text  search messages     (see registerMessageSearch)
+/** @typedef {"commands" | "folders" | "tags" | "search"} QueryMode */
+/** @type {Record<string, QueryMode>} */
 const PREFIX_MODES = { ">": "commands", "@": "folders", "#": "tags", "?": "search" };
 
+/**
+ * @param {string} raw
+ * @returns {{ mode: QueryMode | null, text: string }}
+ */
 function parseQuery(raw) {
   const mode = !picker && raw ? PREFIX_MODES[raw[0]] : undefined;
   return mode ? { mode, text: raw.slice(1).trim() } : { mode: null, text: raw };
 }
 
+/**
+ * @param {Command} cmd
+ * @param {QueryMode | null} mode
+ */
 function matchesMode(cmd, mode) {
   if (mode === "commands") return !cmd.kind;
   if (mode === "folders") return cmd.kind === "folder";
@@ -396,6 +438,7 @@ function matchesMode(cmd, mode) {
 }
 
 // Whether a command's `requires` gate is satisfied by the captured context.
+/** @param {Command} cmd */
 function isAvailable(cmd) {
   if (cmd.requires === "message") return ctx.selectedMessages.length > 0;
   if (cmd.requires === "mailTab") return !!ctx.mailTab;
@@ -403,8 +446,14 @@ function isAvailable(cmd) {
   return true;
 }
 
+/**
+ * @param {string} query
+ * @param {QueryMode | null} [mode]
+ * @returns {ScoredCommand[]}
+ */
 function filterCommands(query, mode = null) {
   const isEmpty = !query;
+  /** @type {ScoredCommand[]} */
   const scored = [];
 
   for (const cmd of (picker ? picker.items : commands)) {
@@ -431,8 +480,9 @@ function filterCommands(query, mode = null) {
     if (cmd.nameStart) {
       const nameResult = Fuzzy.score(query, cmd.label.slice(cmd.nameStart));
       if (nameResult.score > bestScore) {
+        const nameStart = cmd.nameStart;
         bestScore = nameResult.score;
-        positions = nameResult.positions.map(p => p + cmd.nameStart);
+        positions = nameResult.positions.map(p => p + nameStart);
       }
     }
 
@@ -445,7 +495,8 @@ function filterCommands(query, mode = null) {
       const wordScore = Fuzzy.score(query, m[0]).score;
       if (wordScore > bestScore) {
         bestScore = wordScore;
-        positions = Array.from({ length: lowerQuery.length }, (_, k) => m.index + k);
+        const start = m.index ?? 0;
+        positions = Array.from({ length: lowerQuery.length }, (_, k) => start + k);
       }
     }
 
@@ -483,6 +534,7 @@ function filterCommands(query, mode = null) {
   return scored.slice(0, 200);
 }
 
+/** @type {HTMLLIElement[]} */
 let rowEls = [];
 let renderToken = 0;
 
@@ -526,11 +578,13 @@ function render({ firstChunk = false } = {}) {
 
 // Make sure row `i` exists (selection can move past the first chunk before
 // the rest has been appended).
+/** @param {number} i */
 function ensureRendered(i) {
   if (i >= rowEls.length) appendRows(filtered.length);
 }
 
 // Append rows for filtered[rowEls.length .. upTo).
+/** @param {number} upTo */
 function appendRows(upTo) {
   for (let i = rowEls.length; i < upTo; i++) {
     const entry = filtered[i];
@@ -574,6 +628,7 @@ function appendRows(upTo) {
 }
 
 // Refresh one row's selection/armed state and label.
+/** @param {number} i */
 function paintRow(i) {
   const li = rowEls[i];
   const entry = filtered[i];
@@ -583,7 +638,7 @@ function paintRow(i) {
   li.classList.toggle("selected", selected);
   li.classList.toggle("confirm", armed);
   li.setAttribute("aria-selected", String(selected));
-  const label = li.querySelector(".row-label");
+  const label = /** @type {HTMLElement} */ (li.querySelector(".row-label"));
   if (armed) {
     label.textContent = `Press Enter again to confirm: ${entry.cmd.label}`;
   } else {
@@ -595,6 +650,10 @@ function paintRow(i) {
 // late-arriving commands may re-sort the list and the top item is selected.
 let selectionTouched = false;
 
+/**
+ * @param {number} i
+ * @param {{ scroll?: boolean }} [options]
+ */
 function select(i, { scroll = true } = {}) {
   ensureRendered(i);
   selectionTouched = true;
@@ -623,6 +682,7 @@ function scrollSelectedIntoView() {
 
 // Destructive commands need two activations in a row (Enter/click twice).
 // Any selection or query change disarms.
+/** @type {Command | null} */
 let armedCmd = null;
 
 function disarm() {
@@ -640,11 +700,16 @@ function disarm() {
 // it (contacts, tags, tabs…). Sync pickers open immediately; async ones show
 // a "Loading…" state first. A late result is dropped if the picker was closed
 // or replaced in the meantime.
-let picker = null; // { title, empty, placeholder, items, parent }
+/** @type {ActivePicker | null} */
+let picker = null;
 let pickerToken = 0;
 const ROOT_PLACEHOLDER = queryEl.placeholder;
 const ROOT_EMPTY = emptyEl.textContent;
 
+/**
+ * @param {PickerSpec} spec
+ * @param {Command} cmd
+ */
 function showPicker(spec, cmd) {
   picker = { ...spec, parent: cmd };
   modeEl.textContent = picker.title;
@@ -654,8 +719,11 @@ function showPicker(spec, cmd) {
   refilter();
 }
 
+/** @param {Command} cmd a command with a `picker` */
 function openPicker(cmd) {
+  if (!cmd.picker) return;
   const token = ++pickerToken;
+  /** @type {PickerSpec | Promise<PickerSpec>} */
   let result;
   try {
     result = cmd.picker();
@@ -663,7 +731,7 @@ function openPicker(cmd) {
     console.error("[palette] picker failed", e);
     result = { title: cmd.label, empty: "Couldn't load items.", items: [] };
   }
-  if (typeof result?.then !== "function") {
+  if (!("then" in result)) {
     showPicker(result, cmd);
     return;
   }
@@ -705,20 +773,25 @@ function execSelected() {
 // Message search (the "?" prefix) is provided by popup/commands/search.js via
 // registerMessageSearch(fn); fn(text) resolves to an array of commands.
 // Searches are debounced, and a result is dropped if the query moved on.
+/** @type {MessageSearch | null} */
 let messageSearch = null;
-let searchTimer = null;
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let searchTimer;
 let searchSeq = 0;
 const SEARCH_DEBOUNCE_MS = 250;
 const SEARCH_MIN_CHARS = 2;
 
+/** @param {MessageSearch} fn */
 function registerMessageSearch(fn) {
   messageSearch = fn;
 }
 
+/** @param {string} text */
 function setEmptyText(text) {
   emptyEl.textContent = text;
 }
 
+/** @param {string} text */
 function startSearch(text) {
   clearTimeout(searchTimer);
   const seq = ++searchSeq;
@@ -729,10 +802,12 @@ function startSearch(text) {
     setEmptyText("Search messages: type a subject or sender…");
   } else {
     setEmptyText("Searching…");
+    const search = messageSearch;
     searchTimer = setTimeout(async () => {
+      /** @type {Command[]} */
       let results = [];
       try {
-        results = await messageSearch(text);
+        results = await search(text);
       } catch (e) {
         console.error("[palette] message search failed", e);
       }
@@ -804,6 +879,7 @@ queryEl.addEventListener("keydown", (e) => {
 // run in registration order (= <script> order in palette.html), which is also
 // the tie-break order for equal match scores. A failing source is logged and
 // skipped so one broken group can't empty the palette.
+/** @type {CommandSourceEntry[]} */
 const commandSources = [];
 
 //
@@ -825,6 +901,11 @@ function registerCommands(source, { deferred = false } = {}) {
 
 // Run the immediate (deferred = false) or deferred sources, store each
 // result, and return the full command list in registration order.
+/**
+ * @param {CommandEnv} env
+ * @param {boolean} deferred
+ * @returns {Promise<Command[]>}
+ */
 async function buildCommands(env, deferred) {
   await Promise.all(commandSources.filter(s => s.deferred === deferred).map(async (entry) => {
     try {
@@ -839,7 +920,8 @@ async function buildCommands(env, deferred) {
 
 let deferredReady = false;
 let enterQueued = false;
-let enterTimer = null;
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let enterTimer;
 // Upper bound on how long a queued Enter waits for deferred commands, in
 // case a deferred API call hangs.
 const QUEUED_ENTER_MAX_WAIT_MS = 1000;
@@ -863,6 +945,7 @@ function runQueuedEnter() {
 
 // Merge deferred commands into the visible list without disturbing the user:
 // keep the query, keep an explicitly chosen row, otherwise select the new top.
+/** @param {Command[]} all */
 function applyDeferredCommands(all) {
   commands = all;
   deferredReady = true;
@@ -879,6 +962,7 @@ function applyDeferredCommands(all) {
 //
 // background.js opens the popup for per-action shortcuts (manifest
 // `commands`) and holds the requested action until the popup asks for it.
+/** @returns {Promise<string | null>} */
 async function takePendingCommand() {
   if (typeof messenger.runtime?.sendMessage !== "function") return null;
   try {
@@ -892,6 +976,7 @@ async function takePendingCommand() {
 // most recent MRU command that's available here;
 // anything else is a command id to run (or open, for pickers). Destructive
 // commands are skipped for repeat: a shortcut must never fire them unseen.
+/** @param {string} pending */
 function runPendingCommand(pending) {
   // A bare prefix ("@", "?") opens the palette in that mode.
   if (PREFIX_MODES[pending]) {

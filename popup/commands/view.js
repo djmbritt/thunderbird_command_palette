@@ -31,7 +31,7 @@ function quickFilterCommands() {
       icon: f.icon,
       keywords: `quick filter show only ${f.keywords}`,
       requires: "mailTab",
-      run: () => messenger.mailTabs.setQuickFilter(ctx.mailTab.tabId, { ...CLEAR_FILTER, [f.id]: true, show: true })
+      run: () => messenger.mailTabs.setQuickFilter(requireMailTab().tabId, { ...CLEAR_FILTER, [f.id]: true, show: true })
     })),
     {
       id: "quick-filter-clear",
@@ -39,7 +39,7 @@ function quickFilterCommands() {
       icon: "⊘",
       keywords: "quick filter reset remove show all",
       requires: "mailTab",
-      run: () => messenger.mailTabs.setQuickFilter(ctx.mailTab.tabId, { ...CLEAR_FILTER, text: { text: "" } })
+      run: () => messenger.mailTabs.setQuickFilter(requireMailTab().tabId, { ...CLEAR_FILTER, text: { text: "" } })
     }
   ];
 }
@@ -77,7 +77,7 @@ function sortCommands() {
       icon: "⇅",
       keywords: `sort order ${keywords}`,
       requires: "mailTab",
-      run: () => messenger.mailTabs.update(ctx.mailTab.tabId, { sortType: type, sortOrder: currentOrder() })
+      run: () => messenger.mailTabs.update(requireMailTab().tabId, { sortType: type, sortOrder: currentOrder() })
     })),
     {
       id: "sort-reverse",
@@ -88,9 +88,9 @@ function sortCommands() {
       icon: "⇵",
       keywords: "sort order ascending descending flip invert",
       requires: "mailTab",
-      run: () => messenger.mailTabs.update(ctx.mailTab.tabId, {
+      run: () => messenger.mailTabs.update(requireMailTab().tabId, {
         // sortOrder requires sortType to be given too.
-        sortType: ctx.mailTab.sortType || "date",
+        sortType: requireMailTab().sortType || "date",
         sortOrder: currentOrder() === "ascending" ? "descending" : "ascending"
       })
     }
@@ -116,7 +116,7 @@ function groupCommands() {
     icon: "≡",
     keywords: `thread group view ${keywords}`,
     requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.tabId, { groupType: type })
+    run: () => messenger.mailTabs.update(requireMailTab().tabId, { groupType: type })
   }));
 }
 
@@ -132,8 +132,8 @@ registerCommands(() => [
     icon: "◧",
     keywords: "toggle folder pane sidebar layout view",
     requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.tabId, {
-      folderPaneVisible: ctx.mailTab.folderPaneVisible === false
+    run: () => messenger.mailTabs.update(requireMailTab().tabId, {
+      folderPaneVisible: requireMailTab().folderPaneVisible === false
     })
   },
   {
@@ -144,8 +144,8 @@ registerCommands(() => [
     icon: "⬓",
     keywords: "toggle message pane preview reading pane layout view",
     requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.tabId, {
-      messagePaneVisible: ctx.mailTab.messagePaneVisible === false
+    run: () => messenger.mailTabs.update(requireMailTab().tabId, {
+      messagePaneVisible: requireMailTab().messagePaneVisible === false
     })
   },
   ...LAYOUTS.map(/** @returns {Command} */ ({ layout, name, icon }) => ({
@@ -159,6 +159,6 @@ registerCommands(() => [
     icon,
     keywords: `view layout pane ${layout}`,
     requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.tabId, { layout })
+    run: () => messenger.mailTabs.update(requireMailTab().tabId, { layout })
   }))
 ]);

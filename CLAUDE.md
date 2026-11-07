@@ -40,7 +40,7 @@ Measured startup (see **Measuring startup**): first paint went from ~400 ms to ~
 
 **Unread counts were removed** (they used one `folders.getFolderInfo` per folder, competed with startup calls, and re-rendered before the first paint). If they come back, load them after the first paint and update rows in place rather than re-rendering.
 
-**Early Enter.** An Enter pressed before deferred commands arrive, with no explicit selection, is queued (`queueEnter`) and run after the merge. A reflexive Ctrl+Shift+P → Enter therefore runs the true top MRU entry even when that's a deferred command such as Go to: Unified Inbox. Typing or moving the selection cancels the queued Enter. It gives up waiting after 1 s (`QUEUED_ENTER_MAX_WAIT_MS`). Shortcut-launched actions also run after the merge, so they can target deferred commands (`tag-with`). Shared helpers stay in the core: `ctx`, `updateSelected`, `selectionText`, `firstSelectedId`, `switchToFolder`, `destinationItems`, `specialIcon`, `folderEntries`, `notify`, `mailbox`.
+**Early Enter.** An Enter pressed before deferred commands arrive, with no explicit selection, is queued (`queueEnter`) and run after the merge. A reflexive Ctrl+Shift+P → Enter therefore runs the true top MRU entry even when that's a deferred command such as Go to: Unified Inbox. Typing or moving the selection cancels the queued Enter. It gives up waiting after 1 s (`QUEUED_ENTER_MAX_WAIT_MS`). Shortcut-launched actions also run after the merge, so they can target deferred commands (`tag-with`). Shared helpers stay in the core: `ctx`, `requireMailTab`, `updateSelected`, `selectionText`, `firstSelectedId`, `switchToFolder`, `destinationItems`, `specialIcon`, `folderEntries`, `notify`, `mailbox`.
 
 ### Mail context capture
 
@@ -128,7 +128,7 @@ tests/palette.test.js          Core behaviour: pickers, confirm flow, MRU, folde
 tests/features.test.js         Command groups: view, folder actions, tags, prefixes, navigation, compose, search, experiment, shortcuts.
 tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
 types/messenger.d.ts           GENERATED messenger.* types (Thunderbird MV3 ESR schemas + experiments/schema.json). Don't edit; run `npm run types:update`.
-types/palette.d.ts             Our own shapes for JSDoc: Command, PickerSpec, PaletteContext, FolderEntry, …
+types/palette.d.ts             Our own shapes for JSDoc: Command, PickerSpec, ActivePicker, PaletteContext, FolderEntry, CommandSourceEntry, …
 types/globals.d.ts             Declares the lib/ globals (Fuzzy, VCard) for the type checker.
 tools/gen-types.mjs            Schema JSON → .d.ts generator; tools/update-types.sh downloads the schemas and runs it.
 tsconfig.json                  Type-checks the popup scripts (one shared global scope); tsconfig.background.json checks background.js.
@@ -253,7 +253,8 @@ For actions that need Thunderbird internals, add a function to `experiments/sche
 - **API types are generated, not hand-written.** `types/messenger.d.ts` comes from Thunderbird's official annotated MV3 schemas (`thunderbird/webext-annotated-schemas`, branch `esr-mv3`) plus our `experiments/schema.json`. `npm run types:update` regenerates it; the header records the schema commit and Thunderbird version. Don't use `@types/thunderbird-webext-browser`: it describes the MV2 API (e.g. `MailTab.id` instead of `tabId`, no `getUnifiedFolder`).
 - **Minimum version.** The schemas are for the current ESR, newer than our `strict_min_version` 128. Every function and property carries `@since Thunderbird X` (shown on hover). Anything newer than 128 must be feature-detected (`typeof messenger.ns?.fn === "function"`), like `commands.openShortcutSettings` (140).
 - **Our own shapes** live in `types/palette.d.ts` and are used from JSDoc: `/** @type {Command[]} */`, `/** @returns {PickerSpec} */`. Command-building helpers declare `@returns {Command[]}` (and `.map(/** @returns {Command} */ (x) => ({…}))` for mapped tables) so literals like `requires: "mailTab"` are checked against the allowed values. Tables of API enum values get a `@type` using the API type, e.g. `messenger.mailTabs.MailTab["sortType"]`.
-- **Not checked:** `experiments/implementation.js` (privileged code; Thunderbird internals have no types) and `tests/`. `strict` is off; turning it on is a possible next step.
+- **`strict` is on**, so every function parameter needs a JSDoc type (`/** @param {string} text */`) and possibly-missing values must be handled. Many API fields are optional in the schema (`tab.id`, `tab.windowId`, `identity.email`), so guard them rather than assume. Commands gated with `requires` get their context through `requireMailTab()` (core) or `composeTabId()` (compose.js), which throw if it's missing, instead of `ctx.mailTab.…`. For DOM lookups that always succeed, cast: `/** @type {HTMLElement} */ (document.getElementById("…"))`.
+- **Not checked:** `experiments/implementation.js` (privileged code; Thunderbird internals have no types) and `tests/`.
 - The generator maps the schema loosely: optional parameters in the middle become overloads (`mailTabs.update(tabId?, props)`), reserved-word members work (`messages.delete`), and unknown shapes become `any`.
 
 ## Dev loop

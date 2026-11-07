@@ -47,7 +47,10 @@ async function tagPicker() {
 
 // "Go to Tag: X" opens the virtual tag folder (folders.getTagFolder, TB 127+),
 // retrying with the Tags folder mode if the plain update is rejected.
-/** @returns {Command[]} */
+/**
+ * @param {messenger.messages.tags.MessageTag[]} tags
+ * @returns {Command[]}
+ */
 function goToTagCommands(tags) {
   if (typeof messenger.folders?.getTagFolder !== "function") return [];
   return tags.map(t => ({
@@ -66,6 +69,7 @@ function goToTagCommands(tags) {
 }
 
 registerCommands(async () => {
+  /** @type {messenger.messages.tags.MessageTag[]} */
   let tags = [];
   try {
     tags = await listTags();

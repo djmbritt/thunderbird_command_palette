@@ -79,3 +79,22 @@ interface FolderEntry {
   /** Account name, full path and special-use tags. */
   keywords: string;
 }
+
+/** The open picker: its spec plus the command that opened it (see openPicker). */
+interface ActivePicker extends PickerSpec {
+  parent: Command;
+}
+
+/** A registered command source and its latest result (see registerCommands). */
+interface CommandSourceEntry {
+  source: CommandSource;
+  /** Registering script's file name. */
+  file: string;
+  /** "<file>#<n>", used in startup timings. */
+  name: string;
+  deferred: boolean;
+  result: Command[];
+}
+
+/** Provider for "?" message search (see registerMessageSearch). */
+type MessageSearch = (text: string) => Promise<Command[]>;

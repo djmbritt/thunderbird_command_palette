@@ -9,6 +9,7 @@
 
 const UI_FONT_SIZE_CACHE_KEY = "uiFontSize";
 
+/** @param {number} px */
 function isPlausibleFontSize(px) {
   return px >= 8 && px <= 40;
 }

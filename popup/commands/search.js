@@ -23,6 +23,7 @@ async function queryFirstPage(queryInfo) {
   return list.messages || [];
 }
 
+/** @param {Date | string | number} date */
 function shortDate(date) {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return "";
@@ -33,12 +34,16 @@ function shortDate(date) {
 }
 
 // "Alice Example <alice@example.com>" → "Alice Example"
+/** @param {string | undefined} author */
 function displayAuthor(author) {
   const m = /^\s*"?([^"<]*?)"?\s*<[^>]+>\s*$/.exec(author || "");
   return (m && m[1]) || author || "";
 }
 
-/** @returns {Promise<Command[]>} */
+/**
+ * @param {string} text
+ * @returns {Promise<Command[]>}
+ */
 async function searchMessages(text) {
   const [bySubject, byAuthor] = await Promise.all([
     queryFirstPage({ subject: text }),

@@ -2,9 +2,13 @@
 //
 // Loaded after popup/palette.js (core); see the Command registry there.
 
-/** @returns {Command[]} */
+/**
+ * @param {messenger.accounts.MailAccount[]} accounts
+ * @returns {Command[]}
+ */
 function buildExperimentCommands(accounts) {
   if (!HAS_EXPERIMENT) return [];
+  /** @type {Command[]} */
   const out = [];
 
   out.push({
@@ -84,7 +88,7 @@ function buildInternalCommands() {
 async function copyStartupTimings() {
   const { startupTimings = [] } = await messenger.storage.local.get("startupTimings");
   const text = startupTimings.length
-    ? startupTimings.map(run => Timing.summary(run)).join("\n\n")
+    ? startupTimings.map((/** @type {TimingRun} */ run) => Timing.summary(run)).join("\n\n")
     : "No startup timings recorded yet.";
   console.log(`[palette timing] saved runs:\n${text}`);
   try {

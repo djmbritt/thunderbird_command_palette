@@ -16,6 +16,7 @@
 // later never picks up a stale request.
 
 // manifest command name -> palette command id, or a query prefix to prefill.
+/** @type {Record<string, string>} */
 const SHORTCUT_ACTIONS = {
   "palette-repeat-last": "repeat-last",
   "palette-move-to": "move-to",
@@ -27,6 +28,7 @@ const SHORTCUT_ACTIONS = {
 };
 const PENDING_TTL_MS = 5000;
 
+/** @type {{ action: string, at: number } | null} */
 let pending = null;
 
 messenger.commands.onCommand.addListener((command, tab) => {
