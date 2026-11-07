@@ -2,6 +2,7 @@
 //
 // Loaded after popup/palette.js (core); see the Command registry there.
 
+/** @returns {Command[]} */
 function buildExperimentCommands(accounts) {
   if (!HAS_EXPERIMENT) return [];
   const out = [];
@@ -45,6 +46,7 @@ function buildExperimentCommands(accounts) {
 // Internal Thunderbird commands dispatched through the experiment's
 // allowlisted runCommand(). Errors such as "nothing to undo" propagate and
 // are logged by executeAndClose.
+/** @type {{ command: string, id: string, label: string, icon: string, keywords: string, requires?: Command["requires"] }[]} */
 const INTERNAL_COMMANDS = [
   { command: "cmd_undo", id: "undo", label: "Undo", icon: "↶", keywords: "revert back" },
   { command: "cmd_redo", id: "redo", label: "Redo", icon: "↷", keywords: "again" },
@@ -55,6 +57,7 @@ const INTERNAL_COMMANDS = [
   { command: "cmd_viewPageSource", id: "view-source", label: "View Message Source", icon: "</>", keywords: "source raw headers", requires: "message" }
 ];
 
+/** @returns {Command[]} */
 function buildInternalCommands() {
   if (typeof messenger.palette?.runCommand !== "function") return [];
   return [

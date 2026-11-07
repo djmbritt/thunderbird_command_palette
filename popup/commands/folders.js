@@ -18,6 +18,10 @@ async function emptyTrashAllAccounts() {
   }
 }
 
+/**
+ * @param {FolderEntry[]} entries
+ * @returns {Command[]}
+ */
 function buildFolderCommands(entries) {
   return entries.map(e => ({
     id: `goto-folder:${e.folder.id}`,
@@ -38,6 +42,7 @@ function displayedFolder() {
   return ctx.mailTab?.displayedFolder || null;
 }
 
+/** @returns {Command[]} */
 function currentFolderCommands() {
   return [
     {
@@ -71,6 +76,7 @@ function currentFolderCommands() {
 // returns the cross-account aggregate for a special-use type; these have no
 // accountId and aren't part of any account's folder tree. Types are the ones
 // getUnifiedFolder documents, in the order they're listed in the palette.
+/** @type {{ type: Parameters<typeof messenger.folders.getUnifiedFolder>[0], name: string, keywords: string }[]} */
 const UNIFIED_TYPES = [
   { type: "inbox", name: "Inbox", keywords: "all inboxes combined" },
   { type: "drafts", name: "Drafts", keywords: "" },
@@ -81,6 +87,7 @@ const UNIFIED_TYPES = [
   { type: "trash", name: "Trash", keywords: "deleted bin" }
 ];
 
+/** @returns {Promise<Command[]>} */
 async function buildUnifiedCommands() {
   if (typeof messenger.folders?.getUnifiedFolder !== "function") return [];
   const results = await Promise.all(UNIFIED_TYPES.map(async (u) => {

@@ -9,12 +9,14 @@
 
 const SEARCH_RESULT_LIMIT = 50;
 
+/** @param {{ subject?: string, author?: string }} queryInfo */
 async function queryFirstPage(queryInfo) {
-  const list = await messenger.messages.query({
+  // query() returns a list id instead only with returnMessageListId: true.
+  const list = /** @type {messenger.messages.MessageList} */ (await messenger.messages.query({
     ...queryInfo,
     messagesPerPage: SEARCH_RESULT_LIMIT,
     autoPaginationTimeout: 0
-  });
+  }));
   if (list.id && typeof messenger.messages.abortList === "function") {
     messenger.messages.abortList(list.id).catch(() => {});
   }
@@ -36,6 +38,7 @@ function displayAuthor(author) {
   return (m && m[1]) || author || "";
 }
 
+/** @returns {Promise<Command[]>} */
 async function searchMessages(text) {
   const [bySubject, byAuthor] = await Promise.all([
     queryFirstPage({ subject: text }),
@@ -48,7 +51,7 @@ async function searchMessages(text) {
     seen.add(m.id);
     merged.push(m);
   }
-  merged.sort((a, b) => new Date(b.date) - new Date(a.date));
+  merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   return merged.slice(0, SEARCH_RESULT_LIMIT).map(m => ({
     id: `open-message:${m.id}`,
     label: m.subject || "(no subject)",

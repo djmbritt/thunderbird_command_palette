@@ -14,6 +14,7 @@ async function listTags() {
 
 // One picker item per tag. Enter toggles the tag on the whole selection:
 // if every selected message has it, remove it; otherwise add it to all.
+/** @returns {Promise<PickerSpec>} */
 async function tagPicker() {
   const tags = await listTags();
   const selected = ctx.selectedMessages;
@@ -46,6 +47,7 @@ async function tagPicker() {
 
 // "Go to Tag: X" opens the virtual tag folder (folders.getTagFolder, TB 127+),
 // retrying with the Tags folder mode if the plain update is rejected.
+/** @returns {Command[]} */
 function goToTagCommands(tags) {
   if (typeof messenger.folders?.getTagFolder !== "function") return [];
   return tags.map(t => ({

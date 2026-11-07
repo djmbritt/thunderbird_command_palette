@@ -14,12 +14,14 @@
 //      Enter to confirm), then closes the popup.
 //   5. Esc closes without executing; outside click closes natively.
 
-const queryEl = document.getElementById("query");
+const queryEl = /** @type {HTMLInputElement} */ (document.getElementById("query"));
 const resultsEl = document.getElementById("results");
 const emptyEl = document.getElementById("empty");
 const modeEl = document.getElementById("mode");
 
+/** @type {Command[]} */
 let commands = [];
+/** @type {ScoredCommand[]} */
 let filtered = [];
 let selectedIndex = 0;
 // Captured once when the palette opens (see captureContext):
@@ -28,6 +30,7 @@ let selectedIndex = 0;
 //   selectedMessages selected (mail tab) or displayed (message tab) messages
 //   composeTab       active compose tab, or null
 //   composeDetails   compose.getComposeDetails() of composeTab, or null
+/** @type {PaletteContext} */
 let ctx = { mailTab: null, windowId: null, selectedMessages: [], composeTab: null, composeDetails: null };
 
 // MRU (most-recently-used) state. Persisted in storage.local as an ordered
@@ -130,7 +133,7 @@ async function captureContext() {
     if (mailTab) {
       try {
         selectedMessages = await Timing.time("context: selected messages", async () =>
-          collectMessages(await messenger.mailTabs.getSelectedMessages(mailTab.id)));
+          collectMessages(await messenger.mailTabs.getSelectedMessages(mailTab.tabId)));
       } catch (e) {
         console.warn("[palette] getSelectedMessages failed", e);
       }
@@ -212,8 +215,13 @@ function mailbox(name, email) {
 
 // Flat list of navigable folders across all accounts, built once in init().
 // Shared by "Go to:" commands and the Move/Copy destination pickers.
+/** @type {FolderEntry[]} */
 let folderEntries = [];
 
+/**
+ * @param {messenger.accounts.MailAccount[]} accounts
+ * @returns {FolderEntry[]}
+ */
 function collectFolders(accounts) {
   const out = [];
 
@@ -255,6 +263,12 @@ function selectionText() {
 // folder entry (entry.folder.id, entry.displayName). Virtual (saved search),
 // unified and tag folders can't hold real messages, so they're excluded.
 // For moves, the folder all selected messages already live in is excluded too.
+/**
+ * @param {string} verb
+ * @param {(ids: number[], entry: FolderEntry) => unknown} transfer
+ * @param {{ excludeSource: boolean }} options
+ * @returns {Command[]}
+ */
 function destinationItems(verb, transfer, { excludeSource }) {
   const sources = new Set(ctx.selectedMessages.map(m => m.folder?.id).filter(Boolean));
   const soleSource = excludeSource && sources.size === 1 ? [...sources][0] : null;
@@ -287,6 +301,10 @@ function specialIcon(specialUse) {
 // `retryProps` are extra MailTabProperties to retry with if the plain
 // update is rejected, e.g. { folderMode: "unified" } for unified folders
 // when the folder pane isn't showing the unified view.
+/**
+ * @param {messenger.folders.MailFolder} folder
+ * @param {{ retryProps?: messenger.mailTabs.MailTabProperties }} [options]
+ */
 async function switchToFolder(folder, { retryProps } = {}) {
   if (!folder.id) throw new Error("Folder has no id");
   // MV3 validates MailTabProperties strictly; pass only known keys
@@ -303,43 +321,55 @@ async function switchToFolder(folder, { retryProps } = {}) {
     normalWindows[0];
 
   const mailTabs = await messenger.mailTabs.query({ windowId: targetWindow.id });
+  // MV3 MailTab objects carry the tab id as `tabId` (MV2 used `id`).
   const mailTab =
-    (ctx.mailTab && mailTabs.find(t => t.id === ctx.mailTab.id)) ||
+    (ctx.mailTab && mailTabs.find(t => t.tabId === ctx.mailTab.tabId)) ||
     mailTabs.find(t => t.active) ||
     mailTabs[0] ||
     null;
 
+  // mailTabs.create() has no windowId (MV3 rejects unknown properties) and
+  // opens the tab in the focused window, so focus the target window first.
+  const openInNewMailTab = async (windowId) => {
+    try {
+      await messenger.windows.update(windowId, { focused: true });
+    } catch (e) {
+      console.warn("[palette] windows.update focused failed", e);
+    }
+    await messenger.mailTabs.create(updateProps);
+  };
+
   if (!mailTab) {
-    await messenger.mailTabs.create({ ...updateProps, windowId: targetWindow.id });
+    await openInNewMailTab(targetWindow.id);
     return;
   }
 
   // Activate the tab first: some TB versions reject mailTabs.update on a
   // mail tab that isn't the active tab in its window.
   try {
-    await messenger.tabs.update(mailTab.id, { active: true });
+    await messenger.tabs.update(mailTab.tabId, { active: true });
   } catch (e) {
     console.warn("[palette] tabs.update active failed", e);
   }
 
   try {
-    await messenger.mailTabs.update(mailTab.id, updateProps);
+    await messenger.mailTabs.update(mailTab.tabId, updateProps);
     return;
   } catch (e) {
     if (!retryProps) {
       console.warn("[palette] mailTabs.update failed, opening new mail tab", e);
-      await messenger.mailTabs.create({ ...updateProps, windowId: mailTab.windowId });
+      await openInNewMailTab(mailTab.windowId);
       return;
     }
     console.warn("[palette] mailTabs.update failed, retrying with", retryProps, e);
   }
 
   try {
-    await messenger.mailTabs.update(mailTab.id, { ...updateProps, ...retryProps });
+    await messenger.mailTabs.update(mailTab.tabId, { ...updateProps, ...retryProps });
   } catch (e) {
     // Last resort: open the folder in a new mail tab in the same window.
     console.warn("[palette] mailTabs.update failed, opening new mail tab", e);
-    await messenger.mailTabs.create({ ...updateProps, windowId: mailTab.windowId });
+    await openInNewMailTab(mailTab.windowId);
   }
 }
 
@@ -780,10 +810,15 @@ const commandSources = [];
 // `{ deferred: true }` marks a source that needs slow API calls (unified
 // folders, tags). Deferred sources run after the first paint; their commands
 // are merged in at their registration position when they arrive.
+/**
+ * @param {CommandSource} source
+ * @param {{ deferred?: boolean }} [options]
+ */
 function registerCommands(source, { deferred = false } = {}) {
   // Name the source after the registering script (for startup timings):
   // "folders.js#2" = the second source registered by commands/folders.js.
-  const file = (document.currentScript?.src || "").split("/").pop() || "source";
+  const script = /** @type {HTMLScriptElement | null} */ (document.currentScript);
+  const file = (script?.src || "").split("/").pop() || "source";
   const n = commandSources.filter(s => s.file === file).length + 1;
   commandSources.push({ source, file, name: `${file}#${n}`, deferred, result: [] });
 }

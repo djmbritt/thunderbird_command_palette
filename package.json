@@ -1,0 +1,14 @@
+{
+  "name": "thunderbird-command-palette",
+  "private": true,
+  "description": "Dev tooling only (tests, type checking). The add-on itself has no build step and no dependencies.",
+  "scripts": {
+    "test": "node --test tests/",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.background.json",
+    "check": "npm run typecheck && npm test",
+    "types:update": "tools/update-types.sh"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

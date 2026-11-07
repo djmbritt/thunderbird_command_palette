@@ -11,6 +11,7 @@ A VSCode-style command palette extension for Thunderbird. Press `Ctrl+Shift+P` /
 - **Thunderbird MailExtension**, **Manifest V3**, **`messenger.*` namespace** (canonical alias for `browser.*` in Thunderbird).
 - `strict_min_version: "128.0"` — first ESR with stable MV3 support.
 - No build step. No bundler. Pure HTML/CSS/JS. CSP forbids remote scripts and inline handlers, so anything external must be vendored under `lib/`.
+- Type-checked with TypeScript (`checkJs`, `noEmit`) via JSDoc annotations; TypeScript is a dev-only dependency and nothing is compiled. See **Type checking**.
 
 ## Architecture
 
@@ -126,6 +127,12 @@ tests/harness.js               Loads the popup scripts (palette.html order) into
 tests/palette.test.js          Core behaviour: pickers, confirm flow, MRU, folders, unified, panes, junk.
 tests/features.test.js         Command groups: view, folder actions, tags, prefixes, navigation, compose, search, experiment, shortcuts.
 tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
+types/messenger.d.ts           GENERATED messenger.* types (Thunderbird MV3 ESR schemas + experiments/schema.json). Don't edit; run `npm run types:update`.
+types/palette.d.ts             Our own shapes for JSDoc: Command, PickerSpec, PaletteContext, FolderEntry, …
+types/globals.d.ts             Declares the lib/ globals (Fuzzy, VCard) for the type checker.
+tools/gen-types.mjs            Schema JSON → .d.ts generator; tools/update-types.sh downloads the schemas and runs it.
+tsconfig.json                  Type-checks the popup scripts (one shared global scope); tsconfig.background.json checks background.js.
+package.json                   Dev scripts only: test, typecheck, check, types:update.
 experiments/schema.json        Declares the messenger.palette.* API surface.
 experiments/implementation.js  Privileged code wrapping Thunderbird internals.
 icons/icon.svg                 Extension and toolbar icon.
@@ -161,7 +168,7 @@ Folders are added as `Go to: <name>` (`kind: "folder"`) with the breadcrumb (`<a
 
 **Tag folders.** "Go to Tag: X" (`kind: "tag"`) resolves `folders.getTagFolder(key)` when run, then `switchToFolder(…, { retryProps: { folderMode: "tags" } })`.
 
-`switchToFolder` picks the originating normal window (falling back to the focused / first normal window), activates its mail tab, then calls `mailTabs.update({displayedFolderId})`. If that rejects, it opens the folder in a new mail tab. MV3 validates the update schema strictly — only `displayedFolderId` is passed.
+`switchToFolder` picks the originating normal window (falling back to the focused / first normal window), activates its mail tab, then calls `mailTabs.update(tabId, {displayedFolderId})`. If that rejects, it focuses the window and opens the folder with `mailTabs.create`, which has no `windowId` property. MV3 validates these schemas strictly and rejects unknown keys, so only `displayedFolderId` (plus `retryProps`) is passed. MV3 mail tabs carry their id as `tabId`; `id` is the MV2 name.
 
 ## Experiment API (`messenger.palette.*`)
 
@@ -239,6 +246,16 @@ The `run` function is called with no args. The popup closes after it resolves (o
 
 For actions that need Thunderbird internals, add a function to `experiments/schema.json` + `experiments/implementation.js` (or an id to `ALLOWED_COMMANDS` for a `cmd_*`), and feature-detect it in the popup.
 
+## Type checking
+
+`npm install` once, then `npm run typecheck` (or `npm run check` for types + tests). The shipped code stays plain JavaScript: TypeScript only reads it (`allowJs`, `checkJs`, `noEmit`), so there is still no build step.
+
+- **API types are generated, not hand-written.** `types/messenger.d.ts` comes from Thunderbird's official annotated MV3 schemas (`thunderbird/webext-annotated-schemas`, branch `esr-mv3`) plus our `experiments/schema.json`. `npm run types:update` regenerates it; the header records the schema commit and Thunderbird version. Don't use `@types/thunderbird-webext-browser`: it describes the MV2 API (e.g. `MailTab.id` instead of `tabId`, no `getUnifiedFolder`).
+- **Minimum version.** The schemas are for the current ESR, newer than our `strict_min_version` 128. Every function and property carries `@since Thunderbird X` (shown on hover). Anything newer than 128 must be feature-detected (`typeof messenger.ns?.fn === "function"`), like `commands.openShortcutSettings` (140).
+- **Our own shapes** live in `types/palette.d.ts` and are used from JSDoc: `/** @type {Command[]} */`, `/** @returns {PickerSpec} */`. Command-building helpers declare `@returns {Command[]}` (and `.map(/** @returns {Command} */ (x) => ({…}))` for mapped tables) so literals like `requires: "mailTab"` are checked against the allowed values. Tables of API enum values get a `@type` using the API type, e.g. `messenger.mailTabs.MailTab["sortType"]`.
+- **Not checked:** `experiments/implementation.js` (privileged code; Thunderbird internals have no types) and `tests/`. `strict` is off; turning it on is a possible next step.
+- The generator maps the schema loosely: optional parameters in the middle become overloads (`mailTabs.update(tabId?, props)`), reserved-word members work (`messages.delete`), and unknown shapes become `any`.
+
 ## Dev loop
 
 Tests: `node --test tests/` (no dependencies). New commands are picked up automatically, because the harness reads `palette.html`. Stub any new API per test with `loadPalette({ api: (rec) => ({ ns: { fn: rec("name") } }) })`, which records calls into `p.calls`. Values recorded from inside the vm are JSON-copied before asserting, because cross-realm objects fail `deepStrictEqual`.
@@ -273,11 +290,11 @@ Steps recorded: the parallel setup calls, each command source (named `<file>#<n>
 - **Search covers subject and sender only, first 50 per field.** Body/full-text search is slow on large mailboxes.
 - **Undo can't undo actions done via the API** if Thunderbird doesn't record them in its undo stack. Verify per action.
 - **Font size is read when the popup opens.** Changing Thunderbird's font size takes effect the next time the palette opens, not while it's open.
-- **Tests use fakes.** `tests/*.test.js` check popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. It can't catch Thunderbird API signature or permission mismatches, or anything in `experiments/` — verify those in Thunderbird.
+- **Tests use fakes.** `tests/*.test.js` check popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. The type check catches API signature mismatches against the schemas, but neither catches permission problems or anything in `experiments/` — verify those in Thunderbird. Keep the fakes in MV3 shape (e.g. mail tabs have `tabId`).
 
 ## Packaging
 
-Run `./package.sh`. It reads the version from `manifest.json` and writes `../command-palette-<version>.xpi` (outside the project so builds never nest), excluding `.git*`, `.claude/`, `CLAUDE.md`, `package.sh`, `tests/`, `node_modules/`, and stray `.xpi`/`build`/`dist` files. Add any new dev-only files to its `-x` list.
+Run `./package.sh`. It reads the version from `manifest.json` and writes `../command-palette-<version>.xpi` (outside the project so builds never nest), excluding `.git*`, `.claude/`, `CLAUDE.md`, `package.sh`, `tests/`, `tools/`, `types/`, `package*.json`, `tsconfig*.json`, `node_modules/`, and stray `.xpi`/`build`/`dist` files. Add any new dev-only files to its `-x` list.
 
 For ATN submission: code must not be minified or obfuscated. The extension id in `browser_specific_settings.gecko.id` is immutable once published.
 

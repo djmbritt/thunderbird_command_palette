@@ -6,6 +6,7 @@
 // Permissions: compose (details), compose.send (sendLater),
 // compose.save (draft/template), accountsRead (identities).
 
+/** @type {{ value: messenger.compose.ComposeDetails["priority"], name: string }[]} */
 const PRIORITIES = [
   { value: "highest", name: "Highest" },
   { value: "high", name: "High" },
@@ -18,6 +19,7 @@ function composeTabId() {
   return ctx.composeTab.id;
 }
 
+/** @returns {Promise<PickerSpec>} */
 async function identityPicker() {
   const identities = await messenger.identities.list();
   const current = ctx.composeDetails?.identityId;
@@ -38,6 +40,7 @@ async function identityPicker() {
   };
 }
 
+/** @returns {PickerSpec} */
 function priorityPicker() {
   const current = ctx.composeDetails?.priority || "normal";
   return {
@@ -54,6 +57,7 @@ function priorityPicker() {
 }
 
 // Toggle commands whose label reflects the captured compose state.
+/** @returns {Command} */
 function toggleCommand({ id, prop, on, off, icon, keywords }) {
   return {
     id,

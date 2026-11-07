@@ -23,6 +23,11 @@ zip -r -FS "${OUT_PATH}" . \
      "CLAUDE.md" \
      "package.sh" \
      "tests/*" \
+     "tools/*" \
+     "types/*" \
+     "package.json" \
+     "package-lock.json" \
+     "tsconfig*.json" \
      "*.xpi" \
      "build/*" \
      "dist/*" >/dev/null

@@ -75,7 +75,7 @@ function folder(id, name, extra = {}) {
 }
 
 // Load a fresh palette with the given selection. Returns helpers to drive it.
-async function loadPalette({ initialLocalStorage = {}, initialStore = {}, api = {}, activeTab = { id: 1, windowId: 10, type: "mail" }, pending = null, selected, palette, junkFolders = JUNK_FOLDERS, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "standard" } } = {}) {
+async function loadPalette({ initialLocalStorage = {}, initialStore = {}, api = {}, activeTab = { id: 1, windowId: 10, type: "mail" }, pending = null, selected, palette, junkFolders = JUNK_FOLDERS, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { tabId: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "standard" } } = {}) {
   const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"], accountId: "a1" });
   const projects = folder("a1://Projects", "Projects", { accountId: "a1" });
   const savedSearch = folder("a1://Saved", "Saved Search", { isVirtual: true });

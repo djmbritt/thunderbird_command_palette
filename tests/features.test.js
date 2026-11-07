@@ -33,7 +33,7 @@ test("Filter: Clear resets every quick filter including text", async () => {
 });
 
 test("Sort by marks the current column and keeps the direction", async () => {
-  const mailTab = { id: 1, windowId: 10, sortType: "date", sortOrder: "descending" };
+  const mailTab = { tabId: 1, windowId: 10, sortType: "date", sortOrder: "descending" };
   const p = await loadPalette({ selected: [], mailTab });
   p.type("sort by");
   const i = p.labels().indexOf("Sort by Date");
@@ -47,7 +47,7 @@ test("Sort by marks the current column and keeps the direction", async () => {
 });
 
 test("Reverse Sort Order flips the direction of the current column", async () => {
-  const p = await loadPalette({ selected: [], mailTab: { id: 1, windowId: 10, sortType: "subject", sortOrder: "ascending" } });
+  const p = await loadPalette({ selected: [], mailTab: { tabId: 1, windowId: 10, sortType: "subject", sortOrder: "ascending" } });
   p.type("reverse sort");
   p.key("Enter");
   await settle();
@@ -55,7 +55,7 @@ test("Reverse Sort Order flips the direction of the current column", async () =>
 });
 
 test("View: Threaded sets groupType and the current one is marked", async () => {
-  const p = await loadPalette({ selected: [], mailTab: { id: 1, windowId: 10, groupType: "ungrouped" } });
+  const p = await loadPalette({ selected: [], mailTab: { tabId: 1, windowId: 10, groupType: "ungrouped" } });
   p.type("view:");
   const i = p.labels().indexOf("View: Unthreaded");
   assert.equal(p.hints()[i], "current");
@@ -73,7 +73,7 @@ const displayed = { id: "a1://INBOX", name: "Inbox", isFavorite: false };
 test("Mark Folder as Read acts on the displayed folder", async () => {
   const p = await loadPalette({
     selected: [],
-    mailTab: { id: 1, windowId: 10, displayedFolder: displayed },
+    mailTab: { tabId: 1, windowId: 10, displayedFolder: displayed },
     api: (rec) => ({ folders: { markAsRead: rec("markAsRead") } })
   });
   p.type("mark folder");
@@ -86,7 +86,7 @@ test("Mark Folder as Read acts on the displayed folder", async () => {
 test("favorite toggle label follows the folder's state", async () => {
   const p = await loadPalette({
     selected: [],
-    mailTab: { id: 1, windowId: 10, displayedFolder: { ...displayed, isFavorite: true } },
+    mailTab: { tabId: 1, windowId: 10, displayedFolder: { ...displayed, isFavorite: true } },
     api: (rec) => ({ folders: { update: rec("folders.update") } })
   });
   p.type("favorite");
@@ -97,7 +97,7 @@ test("favorite toggle label follows the folder's state", async () => {
 });
 
 test("folder actions are hidden when no folder is displayed", async () => {
-  const p = await loadPalette({ selected: [], mailTab: { id: 1, windowId: 10 } });
+  const p = await loadPalette({ selected: [], mailTab: { tabId: 1, windowId: 10 } });
   p.type("mark folder");
   assert.ok(!p.labels().includes("Mark Folder as Read"));
 });

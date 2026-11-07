@@ -3,6 +3,7 @@
 // Loaded after popup/palette.js (core); see the Command registry there.
 
 // mailTabs `layout` values, named as in Thunderbird's View → Layout menu.
+/** @type {{ layout: messenger.mailTabs.MailTab["layout"], name: string, icon: string }[]} */
 const LAYOUTS = [
   { layout: "standard", name: "Classic View", icon: "⊟" },
   { layout: "wide", name: "Wide View", icon: "☰" },
@@ -21,15 +22,16 @@ const QUICK_FILTERS = [
 ];
 const CLEAR_FILTER = { unread: false, flagged: false, attachment: false, contact: false, tags: false };
 
+/** @returns {Command[]} */
 function quickFilterCommands() {
   return [
-    ...QUICK_FILTERS.map(f => ({
+    ...QUICK_FILTERS.map(/** @returns {Command} */ (f) => ({
       id: `quick-filter-${f.id}`,
       label: `Filter: ${f.name}`,
       icon: f.icon,
       keywords: `quick filter show only ${f.keywords}`,
       requires: "mailTab",
-      run: () => messenger.mailTabs.setQuickFilter(ctx.mailTab.id, { ...CLEAR_FILTER, [f.id]: true, show: true })
+      run: () => messenger.mailTabs.setQuickFilter(ctx.mailTab.tabId, { ...CLEAR_FILTER, [f.id]: true, show: true })
     })),
     {
       id: "quick-filter-clear",
@@ -37,13 +39,14 @@ function quickFilterCommands() {
       icon: "⊘",
       keywords: "quick filter reset remove show all",
       requires: "mailTab",
-      run: () => messenger.mailTabs.setQuickFilter(ctx.mailTab.id, { ...CLEAR_FILTER, text: { text: "" } })
+      run: () => messenger.mailTabs.setQuickFilter(ctx.mailTab.tabId, { ...CLEAR_FILTER, text: { text: "" } })
     }
   ];
 }
 
 // Sorting. mailTabs sortType values, named as in Thunderbird's View → Sort by.
 // Picking a new column keeps the current direction ("none" → ascending).
+/** @type {{ type: messenger.mailTabs.MailTab["sortType"], name: string, keywords: string }[]} */
 const SORT_TYPES = [
   { type: "date", name: "Date", keywords: "sent time" },
   { type: "received", name: "Received", keywords: "arrival time" },
@@ -61,10 +64,11 @@ const SORT_TYPES = [
   { type: "id", name: "Order Received", keywords: "unsorted" }
 ];
 
+/** @returns {Command[]} */
 function sortCommands() {
   const currentOrder = () => (ctx.mailTab?.sortOrder === "descending" ? "descending" : "ascending");
   return [
-    ...SORT_TYPES.map(({ type, name, keywords }) => ({
+    ...SORT_TYPES.map(/** @returns {Command} */ ({ type, name, keywords }) => ({
       id: `sort-${type}`,
       label: `Sort by ${name}`,
       get hint() {
@@ -73,7 +77,7 @@ function sortCommands() {
       icon: "⇅",
       keywords: `sort order ${keywords}`,
       requires: "mailTab",
-      run: () => messenger.mailTabs.update(ctx.mailTab.id, { sortType: type, sortOrder: currentOrder() })
+      run: () => messenger.mailTabs.update(ctx.mailTab.tabId, { sortType: type, sortOrder: currentOrder() })
     })),
     {
       id: "sort-reverse",
@@ -84,7 +88,7 @@ function sortCommands() {
       icon: "⇵",
       keywords: "sort order ascending descending flip invert",
       requires: "mailTab",
-      run: () => messenger.mailTabs.update(ctx.mailTab.id, {
+      run: () => messenger.mailTabs.update(ctx.mailTab.tabId, {
         // sortOrder requires sortType to be given too.
         sortType: ctx.mailTab.sortType || "date",
         sortOrder: currentOrder() === "ascending" ? "descending" : "ascending"
@@ -94,14 +98,16 @@ function sortCommands() {
 }
 
 // Threading / grouping (mailTabs groupType, TB 128+).
+/** @type {{ type: messenger.mailTabs.MailTab["groupType"], name: string, keywords: string }[]} */
 const GROUP_TYPES = [
   { type: "groupedByThread", name: "Threaded", keywords: "threads conversations" },
   { type: "ungrouped", name: "Unthreaded", keywords: "flat no threads" },
   { type: "groupedBySortType", name: "Grouped by Sort", keywords: "groups" }
 ];
 
+/** @returns {Command[]} */
 function groupCommands() {
-  return GROUP_TYPES.map(({ type, name, keywords }) => ({
+  return GROUP_TYPES.map(/** @returns {Command} */ ({ type, name, keywords }) => ({
     id: `group-${type}`,
     label: `View: ${name}`,
     get hint() {
@@ -110,7 +116,7 @@ function groupCommands() {
     icon: "≡",
     keywords: `thread group view ${keywords}`,
     requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.id, { groupType: type })
+    run: () => messenger.mailTabs.update(ctx.mailTab.tabId, { groupType: type })
   }));
 }
 
@@ -126,7 +132,7 @@ registerCommands(() => [
     icon: "◧",
     keywords: "toggle folder pane sidebar layout view",
     requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.id, {
+    run: () => messenger.mailTabs.update(ctx.mailTab.tabId, {
       folderPaneVisible: ctx.mailTab.folderPaneVisible === false
     })
   },
@@ -138,11 +144,11 @@ registerCommands(() => [
     icon: "⬓",
     keywords: "toggle message pane preview reading pane layout view",
     requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.id, {
+    run: () => messenger.mailTabs.update(ctx.mailTab.tabId, {
       messagePaneVisible: ctx.mailTab.messagePaneVisible === false
     })
   },
-  ...LAYOUTS.map(({ layout, name, icon }) => ({
+  ...LAYOUTS.map(/** @returns {Command} */ ({ layout, name, icon }) => ({
     id: `layout-${layout}`,
     label: `Layout: ${name}`,
     // Mark the active layout rather than hiding it, so all three are always
@@ -153,6 +159,6 @@ registerCommands(() => [
     icon,
     keywords: `view layout pane ${layout}`,
     requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.id, { layout })
+    run: () => messenger.mailTabs.update(ctx.mailTab.tabId, { layout })
   }))
 ]);

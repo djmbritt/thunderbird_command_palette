@@ -97,13 +97,15 @@ const Timing = {
 
   // Page lifecycle from the Navigation Timing API (ms since document start).
   recordNavigation() {
-    const nav = performance.getEntriesByType?.("navigation")?.[0];
+    const nav = /** @type {PerformanceNavigationTiming | undefined} */ (performance.getEntriesByType?.("navigation")?.[0]);
     if (!nav) return;
-    for (const [name, value] of [
+    /** @type {[string, number][]} */
+    const landmarks = [
       ["page: DOM interactive", nav.domInteractive],
       ["page: DOMContentLoaded done", nav.domContentLoadedEventEnd],
       ["page: load event done", nav.loadEventEnd]
-    ]) {
+    ];
+    for (const [name, value] of landmarks) {
       if (value > 0) this.run.steps[name] = { start: Math.round(value), end: Math.round(value) };
     }
   },

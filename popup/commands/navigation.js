@@ -19,6 +19,7 @@ const TAB_TYPE_LABELS = {
   special: "Thunderbird"
 };
 
+/** @returns {Promise<PickerSpec>} */
 async function tabPicker() {
   const tabs = await messenger.tabs.query({});
   return {
@@ -48,6 +49,7 @@ async function tabPicker() {
 // item per email address. Capped so a huge address book stays responsive.
 const CONTACT_LIMIT = 3000;
 
+/** @returns {Promise<PickerSpec>} */
 async function contactPicker() {
   const nodes = await messenger.addressBooks.contacts.query({ includeRemote: false });
   const items = [];

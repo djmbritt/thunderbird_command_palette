@@ -184,6 +184,40 @@ test("Unified Inbox retries with folderMode 'unified' if the plain update is rej
   ]);
 });
 
+test("Go to folder updates the mail tab the palette was opened from (MV3 tabId)", async () => {
+  // Two mail tabs in the window; the palette was opened from the second one.
+  // MV3 MailTab objects have `tabId`, not `id`.
+  const first = { tabId: 1, windowId: 10, active: false };
+  const second = { tabId: 2, windowId: 10, active: true };
+  const p = await loadPalette({
+    selected: [],
+    mailTab: second,
+    api: () => ({ mailTabs: { query: async (q) => (q.active ? [second] : [first, second]) } })
+  });
+  p.type("projects");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["mailTabs.update", 2, { displayedFolderId: "a1://Projects" }]]);
+});
+
+test("Go to folder falls back to a new mail tab without passing windowId", async () => {
+  // mailTabs.create() has no windowId property (MV3 rejects unknown keys), so
+  // the target window is focused first.
+  const p = await loadPalette({
+    selected: [],
+    mailTabsUpdate: async () => { throw new Error("rejected"); },
+    api: (rec) => ({ windows: { update: rec("windows.update") } })
+  });
+  p.type("projects");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [
+    ["mailTabs.update", 1, { displayedFolderId: "a1://Projects" }],
+    ["windows.update", 10, { focused: true }],
+    ["mailTabs.create", { displayedFolderId: "a1://Projects" }]
+  ]);
+});
+
 test("no Unified Inbox command when the API is unavailable", async () => {
   const p = await loadPalette({ selected: [], unified: null });
   p.type("unified");
@@ -238,7 +272,7 @@ test("folder pane command hides a visible folder pane", async () => {
 });
 
 test("folder pane command shows a hidden folder pane", async () => {
-  const p = await loadPalette({ selected: [], mailTab: { id: 1, windowId: 10, folderPaneVisible: false } });
+  const p = await loadPalette({ selected: [], mailTab: { tabId: 1, windowId: 10, folderPaneVisible: false } });
   p.type("toggle folder");
   assert.equal(p.labels()[0], "Show Folder Pane");
   p.key("Enter");
@@ -264,7 +298,7 @@ test("message pane command hides a visible message pane", async () => {
 test("message pane command shows a hidden message pane", async () => {
   const p = await loadPalette({
     selected: [],
-    mailTab: { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: false, layout: "standard" }
+    mailTab: { tabId: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: false, layout: "standard" }
   });
   p.type("preview");
   assert.equal(p.labels()[0], "Show Message Pane");
@@ -276,7 +310,7 @@ test("message pane command shows a hidden message pane", async () => {
 test("layout commands list all three layouts and mark the current one", async () => {
   const p = await loadPalette({
     selected: [],
-    mailTab: { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "wide" }
+    mailTab: { tabId: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "wide" }
   });
   p.type("layout");
   const rows = p.els.results.children.map(li => ({
