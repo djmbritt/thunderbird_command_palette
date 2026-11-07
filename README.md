@@ -2,6 +2,8 @@
 
 The missing command palette for Thunderbird. Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> (<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> on macOS), type a few letters, and press <kbd>Enter</kbd>. It works like the command palette in VS Code. You can reply, archive, move messages, jump to folders, change the view, compose, search, and more without touching the mouse.
 
+![The palette open over Thunderbird's inbox, listing recently used commands](store/screenshots/1-recent-commands.png)
+
 ## Features
 
 - **Fuzzy search** over every command and folder. Recently used commands are listed first.
@@ -22,6 +24,10 @@ The missing command palette for Thunderbird. Press <kbd>Ctrl</kbd>+<kbd>Shift</k
 - **In a compose window:** Send Later, Save as Draft or Template, *Send from…* another identity, set priority, request return or delivery receipts.
 - **Undo / Redo**, Get New Mail, and quick access to Settings and Account Settings.
 - Follows Thunderbird's **light/dark theme** and **font size**.
+
+| Fuzzy search | Move to Folder… | Dark theme |
+|---|---|---|
+| ![Typing "arch" finds Archive and Unified Archives](store/screenshots/2-fuzzy-search.png) | ![The Move to Folder picker filtered by "pro"](store/screenshots/3-move-to-folder.png) | ![The palette in Thunderbird's dark theme, filtering tags](store/screenshots/5-dark-theme.png) |
 
 ## Using it
 
