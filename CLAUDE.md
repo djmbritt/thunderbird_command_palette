@@ -70,7 +70,8 @@ popup/palette.html         Search input + result list.
 popup/palette.css          Dark VSCode-ish theme; fixed popup size; .confirm style for armed destructive rows.
 popup/palette.js           Context capture, action registry, fuzzy filter, MRU, render loop.
 lib/fuzzy.js               Subsequence scorer (best of greedy passes from each start) with word-boundary/consecutive/prefix bonuses + highlight(). Loads in both the popup (window.Fuzzy) and Node (module.exports).
-tests/fuzzy.test.js        node:test suite for lib/fuzzy.js. Run: node --test tests/
+tests/fuzzy.test.js        node:test suite for lib/fuzzy.js.
+tests/palette.test.js      Smoke tests: loads popup/palette.js in a vm with a fake DOM + fake messenger.* and drives it by key events.
 experiments/schema.json    Declares the `messenger.palette.*` API surface.
 experiments/implementation.js  Privileged code. Wraps Thunderbird internals (goDoCommand, MailServices) for actions MV3 can't reach.
 package.sh                 Builds ../command-palette-<version>.xpi.
@@ -133,7 +134,7 @@ For actions that need Thunderbird internals, add a function to `experiments/sche
 
 ## Dev loop
 
-Unit tests: `node --test tests/` (no dependencies).
+Tests: `node --test tests/` (no dependencies). When adding a command, extend the fake `messenger` in `tests/palette.test.js` with any new API it calls. Values recorded from inside the vm are JSON-copied before asserting, because cross-realm objects fail `deepStrictEqual`.
 
 1. Open Thunderbird → **Tools → Add-ons and Themes** (`Ctrl+Shift+A`).
 2. Click the gear icon → **Debug Add-ons**.
@@ -146,7 +147,7 @@ Unit tests: `node --test tests/` (no dependencies).
 - **The shortcut is per-Thunderbird-window**, not OS-global. Won't fire when Thunderbird is in the background.
 - **The popup is anchored to the toolbar action button**, not centered like VSCode's palette. A centered, embedded overlay would need a privileged XUL overlay through an Experiment.
 - **Experiment API surface is small.** `getNewMail`, `openSettings`, `openAccountSettings`. Most other toolbar-style actions can be added as `goDoCommand("cmd_*")` on the main window.
-- **Tests cover only `lib/fuzzy.js`.** Everything in `palette.js` touches `messenger.*` and is verified manually in Thunderbird.
+- **Tests use fakes.** `tests/palette.test.js` checks popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. It can't catch Thunderbird API signature or permission mismatches, or anything in `experiments/` — verify those in Thunderbird.
 
 ## Packaging
 
