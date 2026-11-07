@@ -156,6 +156,32 @@ async function executeAndClose(cmd) {
   }
 }
 
+// Mark selected messages as junk (trains the junk filter), then move them to
+// the Junk folder of the account each message belongs to. messages.update
+// only sets the flag, so the move is done explicitly. Messages already in
+// their Junk folder stay put; accounts without a Junk folder are only flagged.
+async function markAsJunkAndMove() {
+  await updateSelected({ junk: true });
+
+  const byAccount = new Map();
+  for (const m of ctx.selectedMessages) {
+    const accountId = m.folder?.accountId;
+    if (!accountId) continue;
+    if (!byAccount.has(accountId)) byAccount.set(accountId, []);
+    byAccount.get(accountId).push(m);
+  }
+
+  await Promise.all([...byAccount].map(async ([accountId, msgs]) => {
+    const [junkFolder] = await messenger.folders.query({ accountId, specialUse: ["junk"] });
+    if (!junkFolder) {
+      console.warn(`[palette] account ${accountId} has no Junk folder; marked as junk without moving`);
+      return;
+    }
+    const ids = msgs.filter(m => m.folder.id !== junkFolder.id).map(m => m.id);
+    if (ids.length > 0) await messenger.messages.move(ids, junkFolder.id);
+  }));
+}
+
 function updateSelected(props) {
   return Promise.all(ctx.selectedMessages.map(m => messenger.messages.update(m.id, props)));
 }
@@ -239,9 +265,7 @@ const STATIC_ACTIONS = [
     icon: "⚠",
     keywords: "spam",
     requires: "message",
-    // Sets the junk flag (trains the junk filter). Unlike the toolbar button,
-    // the API does not also move the message to the Junk folder.
-    run: () => updateSelected({ junk: true })
+    run: markAsJunkAndMove
   },
   {
     id: "mark-not-junk",

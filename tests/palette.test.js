@@ -62,9 +62,9 @@ function folder(id, name, extra = {}) {
 }
 
 // Load a fresh palette with the given selection. Returns helpers to drive it.
-async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "standard" } } = {}) {
-  const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"] });
-  const projects = folder("a1://Projects", "Projects");
+async function loadPalette({ selected, palette, junkFolders = JUNK_FOLDERS, unified = UNIFIED, mailTabsUpdate, extraFolders = [], mailTab = { id: 1, windowId: 10, folderPaneVisible: true, messagePaneVisible: true, layout: "standard" } } = {}) {
+  const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"], accountId: "a1" });
+  const projects = folder("a1://Projects", "Projects", { accountId: "a1" });
   const savedSearch = folder("a1://Saved", "Saved Search", { isVirtual: true });
   const messages = selected ?? [
     { id: 101, folder: inbox, flagged: false },
@@ -89,8 +89,13 @@ async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdat
     tabs: { query: async () => [{ id: 1, windowId: 10 }], update: async () => {} },
     windows: { getAll: async () => [{ id: 10, focused: true }] },
     // `unified`: type -> folder (missing = null), a function, or null for "API unavailable".
-    folders: unified === null ? {} : {
-      getUnifiedFolder: typeof unified === "function" ? unified : async (type) => unified[type] ?? null
+    folders: {
+      // Only junk lookups are modelled: accountId -> Junk folder.
+      query: async ({ accountId, specialUse }) =>
+        specialUse?.includes("junk") && junkFolders[accountId] ? [junkFolders[accountId]] : [],
+      ...(unified === null ? {} : {
+        getUnifiedFolder: typeof unified === "function" ? unified : async (type) => unified[type] ?? null
+      })
     },
     mailTabs: {
       // `mailTab: null` simulates opening the palette from a non-mail tab.
@@ -143,6 +148,11 @@ async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdat
 const unifiedFolder = (type) => ({ id: `unified-${type}-id`, name: type, isUnified: true, specialUse: [type] });
 const UNIFIED_INBOX = unifiedFolder("inbox");
 const UNIFIED = { inbox: UNIFIED_INBOX, sent: unifiedFolder("sent"), trash: unifiedFolder("trash") };
+
+const JUNK_FOLDERS = {
+  a1: { id: "a1://Junk", name: "Junk", accountId: "a1", specialUse: ["junk"] },
+  a2: { id: "a2://Spam", name: "Spam", accountId: "a2", specialUse: ["junk"] }
+};
 
 const settle = () => new Promise(r => setTimeout(r, 10));
 
@@ -437,10 +447,53 @@ test("pane and layout commands are hidden outside a mail tab", async () => {
   assert.ok(!p.labels().some(l => l.includes("Message Pane") || l.startsWith("Layout:")));
 });
 
-test("Mark as Junk flags every selected message as junk", async () => {
+test("Mark as Junk flags the selection and moves it to the account's Junk folder", async () => {
   const p = await loadPalette();
   p.type("junk");
   assert.equal(p.labels()[0], "Mark as Junk");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [
+    ["update", 101, { junk: true }],
+    ["update", 102, { junk: true }],
+    ["move", [101, 102], "a1://Junk"]
+  ]);
+});
+
+test("Mark as Junk moves messages from different accounts to their own Junk folders", async () => {
+  const p = await loadPalette({
+    selected: [
+      { id: 1, folder: { id: "a1://INBOX", accountId: "a1" } },
+      { id: 2, folder: { id: "a2://INBOX", accountId: "a2" } },
+      { id: 3, folder: { id: "a1://Lists", accountId: "a1" } }
+    ]
+  });
+  p.type("mark as junk");
+  p.key("Enter");
+  await settle();
+  const moves = p.calls.filter(c => c[0] === "move").sort((a, b) => a[2].localeCompare(b[2]));
+  assert.deepEqual(moves, [
+    ["move", [1, 3], "a1://Junk"],
+    ["move", [2], "a2://Spam"]
+  ]);
+});
+
+test("Mark as Junk doesn't move messages already in Junk", async () => {
+  const p = await loadPalette({
+    selected: [
+      { id: 1, folder: { id: "a1://Junk", accountId: "a1" } },
+      { id: 2, folder: { id: "a1://INBOX", accountId: "a1" } }
+    ]
+  });
+  p.type("mark as junk");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls.filter(c => c[0] === "move"), [["move", [2], "a1://Junk"]]);
+});
+
+test("Mark as Junk still flags messages when the account has no Junk folder", async () => {
+  const p = await loadPalette({ junkFolders: {} });
+  p.type("mark as junk");
   p.key("Enter");
   await settle();
   assert.deepEqual(p.calls, [
