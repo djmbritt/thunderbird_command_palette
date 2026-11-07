@@ -1,13 +1,14 @@
-// Command Palette popup logic.
+// Command Palette popup — core.
 //
 // Runs as the `action` popup (opened by the `_execute_action` shortcut).
+// This file holds shared state, context capture, helpers, matching, rendering
+// and picker mode. Commands live in popup/commands/*.js and register via
+// registerCommands(); popup/main.js starts everything with init().
 //
 // Lifecycle:
 //   1. On load: capture the mail context of the window hosting the popup
 //      (active mail tab + selected or displayed messages), load MRU history.
-//   2. Build the command list: static actions + a "Go to folder" entry per folder
-//      across all accounts + per-account "Get New Mail" entries (when the
-//      Experiment API is available).
+//   2. Build the command list from every registered command source.
 //   3. Render filtered/scored list on each keystroke.
 //   4. Enter executes the highlighted item (destructive ones need a second
 //      Enter to confirm), then closes the popup.
@@ -84,9 +85,6 @@ async function collectMessages(list) {
   return out;
 }
 
-// Capture the mail context of the window the palette was opened from.
-// `currentWindow` scopes the query to the window hosting the action popup —
-// without it, `active: true` matches the active mail tab of EVERY window.
 // Scale the palette with Thunderbird's UI font size. All text sizes in
 // palette.css are rem, so setting the root font size scales everything.
 // Without the experiment, the CSS fallback (15px) applies.
@@ -101,6 +99,9 @@ async function applyUIFontSize() {
   }
 }
 
+// Capture the mail context of the window the palette was opened from.
+// `currentWindow` scopes the query to the window hosting the action popup —
+// without it, `active: true` matches the active mail tab of EVERY window.
 async function captureContext() {
   try {
     const [activeTab] = await messenger.tabs.query({ active: true, currentWindow: true });
@@ -156,272 +157,8 @@ async function executeAndClose(cmd) {
   }
 }
 
-// Mark selected messages as junk (trains the junk filter), then move them to
-// the Junk folder of the account each message belongs to. messages.update
-// only sets the flag, so the move is done explicitly. Messages already in
-// their Junk folder stay put; accounts without a Junk folder are only flagged.
-async function markAsJunkAndMove() {
-  await updateSelected({ junk: true });
-
-  const byAccount = new Map();
-  for (const m of ctx.selectedMessages) {
-    const accountId = m.folder?.accountId;
-    if (!accountId) continue;
-    if (!byAccount.has(accountId)) byAccount.set(accountId, []);
-    byAccount.get(accountId).push(m);
-  }
-
-  await Promise.all([...byAccount].map(async ([accountId, msgs]) => {
-    const [junkFolder] = await messenger.folders.query({ accountId, specialUse: ["junk"] });
-    if (!junkFolder) {
-      console.warn(`[palette] account ${accountId} has no Junk folder; marked as junk without moving`);
-      return;
-    }
-    const ids = msgs.filter(m => m.folder.id !== junkFolder.id).map(m => m.id);
-    if (ids.length > 0) await messenger.messages.move(ids, junkFolder.id);
-  }));
-}
-
 function updateSelected(props) {
   return Promise.all(ctx.selectedMessages.map(m => messenger.messages.update(m.id, props)));
-}
-
-// mailTabs `layout` values, named as in Thunderbird's View → Layout menu.
-const LAYOUTS = [
-  { layout: "standard", name: "Classic View", icon: "⊟" },
-  { layout: "wide", name: "Wide View", icon: "☰" },
-  { layout: "vertical", name: "Vertical View", icon: "◫" }
-];
-
-const STATIC_ACTIONS = [
-  {
-    id: "compose-new",
-    label: "Compose: New Message",
-    hint: "Ctrl+N",
-    icon: "✎",
-    run: () => messenger.compose.beginNew()
-  },
-  {
-    id: "reply",
-    label: "Reply",
-    icon: "↩",
-    requires: "message",
-    run: () => messenger.compose.beginReply(firstSelectedId(), "replyToSender")
-  },
-  {
-    id: "reply-all",
-    label: "Reply All",
-    icon: "↩↩",
-    requires: "message",
-    run: () => messenger.compose.beginReply(firstSelectedId(), "replyToAll")
-  },
-  {
-    id: "reply-list",
-    label: "Reply to List",
-    icon: "↩",
-    requires: "message",
-    run: () => messenger.compose.beginReply(firstSelectedId(), "replyToList")
-  },
-  {
-    id: "forward-inline",
-    label: "Forward (Inline)",
-    icon: "→",
-    requires: "message",
-    run: () => messenger.compose.beginForward(firstSelectedId(), "forwardInline")
-  },
-  {
-    id: "forward-attach",
-    label: "Forward as Attachment",
-    icon: "→",
-    requires: "message",
-    run: () => messenger.compose.beginForward(firstSelectedId(), "forwardAsAttachment")
-  },
-  {
-    id: "mark-read",
-    label: "Mark as Read",
-    icon: "●",
-    requires: "message",
-    run: () => updateSelected({ read: true })
-  },
-  {
-    id: "mark-unread",
-    label: "Mark as Unread",
-    icon: "○",
-    requires: "message",
-    run: () => updateSelected({ read: false })
-  },
-  {
-    id: "toggle-flag",
-    label: "Toggle Star / Flag",
-    icon: "★",
-    requires: "message",
-    // Mixed selection: flag all if any are unflagged, else unflag all
-    // (per-message flipping would leave a mixed selection still mixed).
-    run: () => updateSelected({ flagged: ctx.selectedMessages.some(m => !m.flagged) })
-  },
-  {
-    id: "mark-junk",
-    label: "Mark as Junk",
-    icon: "⚠",
-    keywords: "spam",
-    requires: "message",
-    run: markAsJunkAndMove
-  },
-  {
-    id: "mark-not-junk",
-    label: "Mark as Not Junk",
-    icon: "✓",
-    keywords: "spam ham legitimate",
-    requires: "message",
-    run: () => updateSelected({ junk: false })
-  },
-  {
-    id: "archive",
-    label: "Archive",
-    icon: "▣",
-    requires: "message",
-    run: () => messenger.messages.archive(ctx.selectedMessages.map(m => m.id))
-  },
-  {
-    id: "move-to",
-    label: "Move to Folder…",
-    icon: "⇥",
-    keywords: "file",
-    requires: "message",
-    picker: () => ({
-      title: `Move ${selectionText()} to…`,
-      empty: "No matching folders.",
-      items: destinationItems("move", (ids, f) => messenger.messages.move(ids, f), { excludeSource: true })
-    })
-  },
-  {
-    id: "copy-to",
-    label: "Copy to Folder…",
-    icon: "⧉",
-    keywords: "duplicate",
-    requires: "message",
-    picker: () => ({
-      title: `Copy ${selectionText()} to…`,
-      empty: "No matching folders.",
-      items: destinationItems("copy", (ids, f) => messenger.messages.copy(ids, f), { excludeSource: false })
-    })
-  },
-  {
-    id: "delete",
-    label: "Delete (Move to Trash)",
-    icon: "✕",
-    requires: "message",
-    destructive: true,
-    run: () => messenger.messages.delete(ctx.selectedMessages.map(m => m.id))
-  },
-  {
-    id: "empty-trash-all",
-    label: "Empty Trash (All Accounts)",
-    hint: "permanent",
-    icon: "✕",
-    destructive: true,
-    run: emptyTrashAllAccounts
-  },
-  {
-    id: "open-address-book",
-    label: "Open Address Book",
-    icon: "☰",
-    run: () => messenger.addressBooks.openUI()
-  },
-  {
-    id: "toggle-folder-pane",
-    // Label reflects the current state (captured when the palette opened).
-    get label() {
-      return ctx.mailTab?.folderPaneVisible === false ? "Show Folder Pane" : "Hide Folder Pane";
-    },
-    icon: "◧",
-    keywords: "toggle folder pane sidebar layout view",
-    requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.id, {
-      folderPaneVisible: ctx.mailTab.folderPaneVisible === false
-    })
-  },
-  {
-    id: "toggle-message-pane",
-    get label() {
-      return ctx.mailTab?.messagePaneVisible === false ? "Show Message Pane" : "Hide Message Pane";
-    },
-    icon: "⬓",
-    keywords: "toggle message pane preview reading pane layout view",
-    requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.id, {
-      messagePaneVisible: ctx.mailTab.messagePaneVisible === false
-    })
-  },
-  ...LAYOUTS.map(({ layout, name, icon }) => ({
-    id: `layout-${layout}`,
-    label: `Layout: ${name}`,
-    // Mark the active layout rather than hiding it, so all three are always
-    // findable and the user can see which one is in use.
-    get hint() {
-      return ctx.mailTab?.layout === layout ? "current" : undefined;
-    },
-    icon,
-    keywords: `view layout pane ${layout}`,
-    requires: "mailTab",
-    run: () => messenger.mailTabs.update(ctx.mailTab.id, { layout })
-  }))
-];
-
-async function emptyTrashAllAccounts() {
-  const accounts = await messenger.accounts.list(false);
-  for (const a of accounts) {
-    const [trash] = await messenger.folders.query({ accountId: a.id, specialUse: ["trash"] });
-    if (!trash) continue;
-    let page = await messenger.messages.list(trash.id);
-    while (true) {
-      if (page.messages.length === 0) break;
-      const ids = page.messages.map(m => m.id);
-      await messenger.messages.delete(ids, { deletePermanently: true });
-      if (!page.id) break;
-      page = await messenger.messages.continueList(page.id);
-    }
-  }
-}
-
-function buildExperimentCommands(accounts) {
-  if (!HAS_EXPERIMENT) return [];
-  const out = [];
-
-  out.push({
-    id: "getnewmail:all",
-    label: "Get New Mail (All Accounts)",
-    icon: "⟳",
-    run: () => messenger.palette.getNewMail()
-  });
-
-  for (const a of accounts) {
-    // Local Folders ("none") has no incoming server to fetch from.
-    if (a.type === "none") continue;
-    out.push({
-      id: `getnewmail:${a.id}`,
-      label: `Get New Mail: ${a.name}`,
-      icon: "⟳",
-      keywords: a.id,
-      run: () => messenger.palette.getNewMail(a.id)
-    });
-  }
-
-  out.push({
-    id: "open-settings",
-    label: "Open Thunderbird Settings",
-    icon: "⚙",
-    run: () => messenger.palette.openSettings()
-  });
-
-  out.push({
-    id: "open-account-settings",
-    label: "Open Account Settings",
-    icon: "⚙",
-    run: () => messenger.palette.openAccountSettings()
-  });
-
-  return out;
 }
 
 // Flat list of navigable folders across all accounts, built once in init().
@@ -458,59 +195,6 @@ function collectFolders(accounts) {
     if (a.rootFolder) walk(a.rootFolder, a.name, "");
   }
   return out;
-}
-
-function buildFolderCommands(entries) {
-  return entries.map(e => ({
-    id: `goto-folder:${e.folder.id}`,
-    label: `Go to: ${e.displayName}`,
-    // Index where the folder name starts in `label`. The name is scored on
-    // its own too, so typing "inbox" gets the prefix bonus on "Inbox".
-    nameStart: "Go to: ".length,
-    hint: e.breadcrumb,
-    icon: e.icon,
-    keywords: e.keywords,
-    run: () => switchToFolder(e.folder)
-  }));
-}
-
-// "Go to: Unified <folder>" commands. folders.getUnifiedFolder (TB 127+)
-// returns the cross-account aggregate for a special-use type; these have no
-// accountId and aren't part of any account's folder tree. Types are the ones
-// getUnifiedFolder documents, in the order they're listed in the palette.
-const UNIFIED_TYPES = [
-  { type: "inbox", name: "Inbox", keywords: "all inboxes combined" },
-  { type: "drafts", name: "Drafts", keywords: "" },
-  { type: "sent", name: "Sent", keywords: "outgoing" },
-  { type: "archives", name: "Archives", keywords: "archive" },
-  { type: "templates", name: "Templates", keywords: "" },
-  { type: "junk", name: "Junk", keywords: "spam" },
-  { type: "trash", name: "Trash", keywords: "deleted bin" }
-];
-
-async function buildUnifiedCommands() {
-  if (typeof messenger.folders?.getUnifiedFolder !== "function") return [];
-  const results = await Promise.all(UNIFIED_TYPES.map(async (u) => {
-    try {
-      return { ...u, folder: await messenger.folders.getUnifiedFolder(u.type) };
-    } catch (e) {
-      // One unavailable type shouldn't hide the others.
-      console.warn(`[palette] getUnifiedFolder(${u.type}) failed`, e);
-      return { ...u, folder: null };
-    }
-  }));
-  return results
-    .filter(r => r.folder)
-    .map(({ type, name, keywords, folder }) => ({
-      // Stable id for MRU: unified folder ids are only valid per-session.
-      id: `goto-unified-${type}`,
-      label: `Go to: Unified ${name}`,
-      nameStart: "Go to: ".length,
-      hint: "All accounts",
-      icon: specialIcon([type]),
-      keywords: `unified all accounts smart ${type} ${keywords}`,
-      run: () => switchToFolder(folder, { retryProps: { folderMode: "unified" } })
-    }));
 }
 
 function selectionText() {
@@ -871,21 +555,41 @@ queryEl.addEventListener("keydown", (e) => {
 
 // Action popups native-close on outside click; no manual blur handler needed.
 
+// ---- Command registry -------------------------------------------------------
+//
+// Command files in popup/commands/ call registerCommands(source) at load time.
+// `source({ accounts })` returns (or resolves to) an array of commands. Sources
+// run in registration order (= <script> order in palette.html), which is also
+// the tie-break order for equal match scores. A failing source is logged and
+// skipped so one broken group can't empty the palette.
+const commandSources = [];
+
+function registerCommands(source) {
+  commandSources.push(source);
+}
+
+async function buildCommands(env) {
+  const lists = await Promise.all(commandSources.map(async (source) => {
+    try {
+      return (await source(env)) || [];
+    } catch (e) {
+      console.warn("[palette] command source failed", e);
+      return [];
+    }
+  }));
+  return lists.flat();
+}
+
+// Called from popup/main.js once every command file has registered.
 async function init() {
-  // Load MRU and accounts in parallel — neither depends on the other.
-  const [, accounts, , , unifiedCommands] = await Promise.all([
+  const [, accounts] = await Promise.all([
     loadMru(),
     messenger.accounts.list(true),
     captureContext(),
-    applyUIFontSize(), // before first render, so the popup doesn't jump in size
-    buildUnifiedCommands()
+    applyUIFontSize() // before first render, so the popup doesn't jump in size
   ]);
   folderEntries = collectFolders(accounts);
-  const folderCommands = buildFolderCommands(folderEntries);
-  const experimentCommands = buildExperimentCommands(accounts);
-  commands = [...STATIC_ACTIONS, ...experimentCommands, ...unifiedCommands, ...folderCommands];
+  commands = await buildCommands({ accounts });
   refilter();
   queryEl.focus();
 }
-
-init();

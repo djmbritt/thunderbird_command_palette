@@ -14,8 +14,13 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
-const FUZZY_SRC = fs.readFileSync(path.join(ROOT, "lib/fuzzy.js"), "utf8");
-const PALETTE_SRC = fs.readFileSync(path.join(ROOT, "popup/palette.js"), "utf8");
+// Load the popup's scripts exactly as palette.html does, in its <script> order,
+// so new command files are picked up without touching the tests.
+const HTML = fs.readFileSync(path.join(ROOT, "popup/palette.html"), "utf8");
+const SCRIPTS = [...HTML.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => {
+  const file = path.join(ROOT, "popup", m[1]);
+  return { file, src: fs.readFileSync(file, "utf8") };
+});
 
 // Just enough of an HTMLElement for palette.js.
 function fakeElement(init = {}) {
@@ -132,8 +137,7 @@ async function loadPalette({ selected, palette, junkFolders = JUNK_FOLDERS, unif
     window: { close() { state.closed = true; } },
     document: { documentElement, getElementById: (id) => els[id], createElement: () => fakeElement() }
   });
-  vm.runInContext(FUZZY_SRC, context);
-  vm.runInContext(PALETTE_SRC, context);
+  for (const { file, src } of SCRIPTS) vm.runInContext(src, context, { filename: file });
   await settle(); // let init() finish
 
   const key = (k) => els.query.listeners.keydown({ key: k, preventDefault() {} });
