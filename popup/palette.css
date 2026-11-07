@@ -1,12 +1,40 @@
+/* Thunderbird-native look. Light by default; dark via prefers-color-scheme,
+   which extension pages inherit from the Thunderbird / system theme. */
+
 :root {
-  --bg: #1f1f1f;
-  --surface: #252526;
-  --border: #3c3c3c;
-  --text: #cccccc;
-  --text-dim: #8a8a8a;
-  --accent: #0e639c;
-  --accent-hover: #1177bb;
-  --selected: #094771;
+  color-scheme: light dark;
+
+  --bg: #ffffff;
+  --surface: #f9f9fb;
+  --border: #e0e0e6;
+  --text: #15141a;
+  --text-dim: #5b5b66;
+  --accent: #0061e0;
+  --row-hover: rgba(21, 20, 26, 0.05);
+  --row-selected: rgba(0, 97, 224, 0.10);
+  --danger: #c50042;
+  --danger-bg: rgba(197, 0, 66, 0.10);
+  --kbd-bg: #f0f0f4;
+  --kbd-border: #cfcfd8;
+  --scrollbar: #cfcfd8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1b22;
+    --surface: #2b2a33;
+    --border: #3a3944;
+    --text: #fbfbfe;
+    --text-dim: #a8a8b3;
+    --accent: #58a6ff;
+    --row-hover: rgba(251, 251, 254, 0.06);
+    --row-selected: rgba(88, 166, 255, 0.16);
+    --danger: #ff6b8b;
+    --danger-bg: rgba(255, 107, 139, 0.14);
+    --kbd-bg: #2b2a33;
+    --kbd-border: #52525e;
+    --scrollbar: #52525e;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -20,7 +48,7 @@ html, body {
   height: 400px;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow: hidden;
 }
 
@@ -31,44 +59,102 @@ html, body {
   width: 100%;
 }
 
-#query {
-  width: 100%;
-  padding: 10px 12px;
-  background: var(--surface);
-  color: var(--text);
-  border: none;
-  border-bottom: 1px solid var(--border);
-  font-size: 14px;
-  outline: none;
+/* ---- Picker banner ("Move 3 messages to…") ---- */
+
+#mode {
+  margin: 8px 10px 0;
+  padding: 3px 8px;
+  align-self: flex-start;
+  border-radius: 4px;
+  background: var(--row-selected);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-#query:focus {
-  border-bottom-color: var(--accent);
+/* ---- Search field ---- */
+
+#search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
+
+#search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+#search svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  fill: var(--text-dim);
+}
+
+#query {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 14px;
+}
+
+#query::placeholder {
+  color: var(--text-dim);
+}
+
+/* ---- Results ---- */
 
 #results {
   flex: 1;
   overflow-y: auto;
   margin: 0;
-  padding: 4px 0;
+  padding: 0 6px 6px;
   list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 #results li {
-  padding: 6px 12px;
-  cursor: pointer;
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
   user-select: none;
 }
 
-#results li.selected {
-  background: var(--selected);
+#results li:hover:not(.selected) {
+  background: var(--row-hover);
 }
 
-#results li:hover:not(.selected) {
-  background: rgba(255, 255, 255, 0.04);
+#results li.selected {
+  background: var(--row-selected);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Armed destructive row: "Press Enter again to confirm: …" */
+#results li.confirm,
+#results li.confirm.selected {
+  background: var(--danger-bg);
+  box-shadow: inset 3px 0 0 var(--danger);
+  color: var(--danger);
+}
+
+#results li.confirm .row-icon,
+#results li.confirm .row-hint {
+  color: var(--danger);
 }
 
 .row-icon {
@@ -78,55 +164,63 @@ html, body {
   flex-shrink: 0;
 }
 
+#results li.selected .row-icon {
+  color: var(--accent);
+}
+
 .row-label {
   flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .row-hint {
+  max-width: 40%;
   color: var(--text-dim);
   font-size: 11px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   flex-shrink: 0;
 }
 
 .row-match {
-  color: #fff;
+  color: var(--accent);
   font-weight: 600;
 }
 
 #empty {
-  padding: 16px;
+  padding: 24px 16px;
   text-align: center;
   color: var(--text-dim);
 }
 
-#results::-webkit-scrollbar {
-  width: 10px;
-}
+/* ---- Footer key hints ---- */
 
-#results::-webkit-scrollbar-thumb {
-  background: #424242;
-  border-radius: 5px;
-}
-
-#results::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-#results li.confirm,
-#results li.confirm.selected {
-  background: #5a1d1d;
-  color: #f48771;
-}
-
-/* Picker-mode banner, e.g. "Move 3 messages to…". */
-#mode {
+#footer {
+  display: flex;
+  gap: 16px;
   padding: 6px 12px;
+  border-top: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-dim);
   font-size: 11px;
-  border-bottom: 1px solid var(--border);
+}
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 2px;
+  padding: 0 4px;
+  border: 1px solid var(--kbd-border);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--kbd-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
 }

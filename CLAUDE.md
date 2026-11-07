@@ -45,6 +45,10 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 
 `render()` rebuilds the list only when the filtered set changes (`refilter`). Selection changes (arrows, hover) go through `select(i)`, which repaints just the old and new rows via `paintRow`. Hover selection uses `mousemove`, not `mouseenter`, so rows scrolling under a stationary pointer during keyboard navigation don't steal the selection. The input is an ARIA combobox: `aria-activedescendant` points at the selected `opt-<i>` row.
 
+### Styling
+
+All colours are CSS variables on `:root`, with a `@media (prefers-color-scheme: dark)` override block — extension pages follow the Thunderbird/system theme. Add new colours to **both** blocks. Use `scrollbar-width`/`scrollbar-color` (Gecko), not `::-webkit-scrollbar`. The footer's Esc label (`#esc-action`) reads "close" in the root list and "back" in a picker.
+
 ### Picker mode (Move / Copy to Folder…)
 
 A command with a `picker` function opens a sub-list instead of running. `picker()` returns `{ title, empty, items }`; `items` are ordinary commands (with `id`, `label`, `run`, …). While a picker is open:
@@ -66,8 +70,8 @@ Mark any new irreversible action `destructive: true`.
 
 ```
 manifest.json              MV3 manifest. Binds the shortcut to _execute_action, declares permissions and the experiment API.
-popup/palette.html         Search input + result list.
-popup/palette.css          Dark VSCode-ish theme; fixed popup size; .confirm style for armed destructive rows.
+popup/palette.html         Picker banner, search field (inline SVG icon), result list, key-hint footer.
+popup/palette.css          Thunderbird-native theme: light default + prefers-color-scheme dark, all colours as :root variables; fixed popup size; .confirm style for armed destructive rows.
 popup/palette.js           Context capture, action registry, fuzzy filter, MRU, render loop.
 lib/fuzzy.js               Subsequence scorer (best of greedy passes from each start) with word-boundary/consecutive/prefix bonuses + highlight(). Loads in both the popup (window.Fuzzy) and Node (module.exports).
 tests/fuzzy.test.js        node:test suite for lib/fuzzy.js.
