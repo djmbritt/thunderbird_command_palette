@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Command Palette: a prompt chevron and cursor line on a rounded tile in
+       Thunderbird blue. Solid colours so it reads on light and dark toolbars. -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#0061e0"/>
+  <path d="M17 21 L29 32 L17 43" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M34 43 H47" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>
+</svg>

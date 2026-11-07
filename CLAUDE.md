@@ -111,6 +111,7 @@ tests/features.test.js         Command groups: view, folder actions, tags, prefi
 tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
 experiments/schema.json        Declares the messenger.palette.* API surface.
 experiments/implementation.js  Privileged code wrapping Thunderbird internals.
+icons/icon.svg                 Extension and toolbar icon.
 package.sh                     Builds ../command-palette-<version>.xpi.
 ```
 
@@ -260,4 +261,4 @@ For ATN submission: code must not be minified or obfuscated. The extension id in
 
 ## Icons
 
-Not yet added. Drop PNGs into `icons/` and reference them via the `icons` key and `action.default_icon` in `manifest.json`.
+`icons/icon.svg` is a single SVG (prompt chevron and cursor on a rounded Thunderbird-blue tile), used for every size in both `icons` (add-ons manager, ATN) and `action.default_icon` (toolbar button). It uses solid colours rather than `context-fill`, so it reads on light and dark toolbars without `theme_icons`. Check it at 16px after any change, since that's the toolbar size.
