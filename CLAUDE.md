@@ -150,7 +150,7 @@ tsconfig.json                  Type-checks the popup scripts (one shared global 
 package.json                   Dev scripts only: test, typecheck, check:since, check, types:update.
 experiments/schema.json        Declares the messenger.palette.* API surface.
 experiments/implementation.js  Privileged code wrapping Thunderbird internals.
-icons/icon.svg                 Extension and toolbar icon.
+icons/icon.svg                 Icon source; tools/make-icons.sh renders icons/icon-<size>.png (what the manifest uses).
 package.sh                     Builds ../command-palette-<version>.xpi.
 PRIVACY.md                     Privacy policy (shipped; pasted into the ATN listing).
 store/LISTING.md               ATN listing text, notes to reviewer and screenshot list (dev-only, not shipped).
@@ -328,4 +328,4 @@ For ATN submission: code must not be minified or obfuscated. **`strict_max_versi
 
 ## Icons
 
-`icons/icon.svg` is a single SVG (prompt chevron and cursor on a rounded Thunderbird-blue tile), used for every size in both `icons` (add-ons manager, ATN) and `action.default_icon` (toolbar button). It uses solid colours rather than `context-fill`, so it reads on light and dark toolbars without `theme_icons`. Check it at 16px after any change, since that's the toolbar size.
+`icons/icon.svg` is the source (prompt chevron and cursor on a rounded Thunderbird-blue tile). The manifest uses PNGs rendered from it by `tools/make-icons.sh` (`icons/icon-<size>.png`, 16–128 px): `icons` (add-ons manager, ATN) gets every size, `action.default_icon` (toolbar button) 16–64. The SVG itself isn't shipped. Rerun the script after changing the SVG, and check the 16 px PNG, since that's the toolbar size. It uses solid colours rather than `context-fill`, so it reads on light and dark toolbars without `theme_icons`.

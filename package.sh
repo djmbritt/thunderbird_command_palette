@@ -26,6 +26,7 @@ zip -r -FS "${OUT_PATH}" . \
      "e2e/*" \
      "store/*" \
      "tools/*" \
+     "icons/icon.svg" \
      "types/*" \
      "package.json" \
      "package-lock.json" \
