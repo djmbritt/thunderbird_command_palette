@@ -44,7 +44,7 @@ Text to paste into the ATN listing and submission forms. Not shipped in the
 >
 > **Full access:** a few commands (Get New Mail, Undo/Redo, Print, View Source, Compact Folders, Expand/Collapse Threads, Today pane, Calendar/Tasks/Chat, Settings) need Thunderbird features that add-ons can't otherwise reach, so the add-on includes a small "experiment" and Thunderbird asks for full access. That code only performs that fixed list of actions.
 >
-> Requires Thunderbird 128 or newer. Open source (MIT): https://github.com/djmbritt/thunderbird_command_palette
+> Requires Thunderbird 128 to 160 (raised as new Thunderbird versions are tested). Open source (MIT): https://github.com/djmbritt/thunderbird_command_palette
 
 ## Notes to reviewer
 

@@ -57,7 +57,7 @@ These shortcuts open the palette through its toolbar button, so keep the button 
 
 ## Install
 
-Requires **Thunderbird 128 or newer**.
+Requires **Thunderbird 128 to 160**. The upper limit is raised in new releases once a new Thunderbird version has been tested: add-ons that use an experiment API are disabled on versions above it.
 
 1. Download the latest `command-palette-<version>.xpi` from the [Releases page](https://github.com/djmbritt/thunderbird_command_palette/releases/latest).
 2. In Thunderbird, open **Tools → Add-ons and Themes**, click **⚙ → Install Add-on From File…** and choose the downloaded file.
