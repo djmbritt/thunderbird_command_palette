@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Command Palette",
   "description": "VSCode-style command palette for Thunderbird. Press Ctrl+Shift+P to summon.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "David Britt",
   "homepage_url": "https://github.com/djmbritt/thunderbird_command_palette",
   "icons": {
@@ -15,7 +15,8 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "command-palette@djmbritt.github.io",
-      "strict_min_version": "128.0"
+      "strict_min_version": "128.0",
+      "strict_max_version": "160.*"
     }
   },
   "background": {
