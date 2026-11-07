@@ -95,6 +95,7 @@ popup/palette.html             Picker banner, search field, result list; <script
 popup/palette.css              Thunderbird-native theme (light + dark), rem-based sizing, .confirm and .row-badge styles.
 popup/palette.js               Core: ctx capture, MRU, helpers, command registry, matching + prefixes, search hook, render, pickers, pending shortcut actions.
 popup/main.js                  Calls init(); must be the last script.
+popup/timing.js                Startup timing instrumentation (see Measuring startup); loaded before palette.js.
 popup/commands/compose.js      Compose window: Send Later, Save as Draft/Template, Send from…, Set Priority…, receipt toggles.
 popup/commands/messages.js     Compose new, reply, forward, open in tab/window, mark read/unread/star/junk, archive, Move/Copy to…, delete.
 popup/commands/tags.js         Tag with…, Remove All Tags, Go to Tag: X.
@@ -234,6 +235,14 @@ Tests: `node --test tests/` (no dependencies). New commands are picked up automa
 3. **Load Temporary Add-on…** → pick `manifest.json`.
 4. After code changes: hit **Reload** on this extension's row. No restart. If permissions changed, re-enable / re-grant.
 5. **Inspect** opens DevTools for the extension. To inspect the popup without it closing, use the Browser Toolbox → "Disable popup auto-hide".
+
+## Measuring startup
+
+`popup/timing.js` (loaded before the core) records how long each startup step takes on every open: the parallel setup calls, each command source (named `<file>#<n>` after the script that registered it), the first render, first paint, and the unread-count pass, which finishes after the palette is shown. Each step stores `{start, end}` in ms since the popup document started loading, so overlapping steps are visible. It also stores counts (accounts, folders, selected messages, extra selection pages, commands, rows, unread-count calls, slowest unread call).
+
+- After first paint, a summary is logged to the popup console as `[palette timing]`, and the run is saved to `storage.local.startupTimings` (last 10 runs). Unread counts are added to the run when they finish.
+- **Debug: Copy Startup Timings** copies all saved runs to the clipboard, or logs them if clipboard access is refused.
+- Debug switches live in `storage.local.debug`, set from the extension's Inspect console: `messenger.storage.local.set({ debug: { skipUnreadCounts: true } })` disables unread counts so you can compare runs with and without them. Clear with `messenger.storage.local.remove("debug")`.
 
 ## Known limitations
 

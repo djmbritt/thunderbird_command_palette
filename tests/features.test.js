@@ -493,3 +493,56 @@ test("repeat-last never fires a destructive command", async () => {
   await settle();
   assert.deepEqual(p.calls, [["update", 101, { read: true }], ["update", 102, { read: true }]]);
 });
+
+// ---- Startup timing instrumentation -----------------------------------------
+
+// Poll until `fn()` is truthy (saving a run takes a few async hops).
+async function until(fn, ms = 1000) {
+  const end = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > end) throw new Error("timed out waiting");
+    await wait(5);
+  }
+}
+
+test("each open saves a startup timing run with named steps and counts", async () => {
+  const p = await loadPalette({ selected: [] });
+  await until(() => p.store.startupTimings?.[0]?.steps.firstPaint);
+  const [run] = p.store.startupTimings;
+  for (const step of ["setup: accounts.list(true)", "setup: captureContext", "buildCommands (all sources)",
+    "source: folders.js#3", "first refilter + render", "firstPaint"]) {
+    assert.ok(run.steps[step], `missing step ${step}: ${Object.keys(run.steps).join(", ")}`);
+  }
+  assert.equal(run.counts.folders, 3);
+  assert.equal(run.counts.selectedMessages, 0);
+  assert.ok(run.counts.commands > 0);
+});
+
+test("unread counts are timed, and can be switched off for comparison", async () => {
+  const infoCalls = [];
+  const api = { folders: { getFolderInfo: async (id) => { infoCalls.push(id); return { unreadMessageCount: 1 }; } } };
+  const on = await loadPalette({ selected: [], api });
+  await until(() => on.store.startupTimings?.[0]?.steps["unread counts (background)"]);
+  assert.ok(infoCalls.length > 0);
+  assert.ok(on.store.startupTimings[0].steps["unread counts (background)"]);
+  assert.equal(on.store.startupTimings[0].counts.unreadCountCalls, infoCalls.length);
+
+  infoCalls.length = 0;
+  const off = await loadPalette({ selected: [], api, initialStore: { debug: { skipUnreadCounts: true } } });
+  await until(() => off.store.startupTimings?.[0]?.steps["unread counts (background)"]);
+  assert.equal(infoCalls.length, 0);
+  assert.equal(off.store.startupTimings[0].counts.unreadCountsSkipped, 1);
+});
+
+test("Debug: Copy Startup Timings copies a readable summary", async () => {
+  let copied = null;
+  const p = await loadPalette({ selected: [] });
+  await until(() => p.store.startupTimings?.[0]?.steps.firstPaint);
+  p.context.navigator = { clipboard: { writeText: async (t) => { copied = t; } } };
+  p.type("copy startup timings");
+  p.key("Enter");
+  await until(() => copied);
+  assert.match(copied, /^startup .*: first paint at \d+ ms/);
+  assert.match(copied, /setup: accounts\.list\(true\)/);
+  assert.match(copied, /counts: .*folders=3/);
+});

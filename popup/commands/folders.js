@@ -44,14 +44,23 @@ const UNREAD_COUNT_LIMIT = 500;
 
 async function loadUnreadCounts(entries) {
   if (typeof messenger.folders?.getFolderInfo !== "function") return;
+  if (debugSettings.skipUnreadCounts) {
+    Timing.set("unreadCountsSkipped", 1);
+    return;
+  }
+  let slowest = 0;
   await Promise.all(entries.slice(0, UNREAD_COUNT_LIMIT).map(async (e) => {
     if (e.folder.isVirtual) return; // saved searches: counting re-runs the search
+    const start = performance.now();
     try {
       e.unread = (await messenger.folders.getFolderInfo(e.folder.id)).unreadMessageCount || 0;
     } catch {
       // Folder may be gone or unavailable (offline IMAP); leave it blank.
     }
+    Timing.count("unreadCountCalls");
+    slowest = Math.max(slowest, performance.now() - start);
   }));
+  Timing.set("unreadCountSlowestCallMs", Math.round(slowest));
 }
 
 // Actions on the folder shown in the current mail tab.
@@ -141,6 +150,10 @@ registerCommands(() => [
 registerCommands(() => buildUnifiedCommands());
 registerCommands(() => currentFolderCommands().filter(() => displayedFolder()));
 registerCommands(() => {
-  loadUnreadCounts(folderEntries).then(() => render());
+  Timing.time("unread counts (background)", loadUnreadCounts(folderEntries))
+    .then(() => {
+      render();
+      return Timing.reportLate("unread counts (background)");
+    });
   return buildFolderCommands(folderEntries);
 });

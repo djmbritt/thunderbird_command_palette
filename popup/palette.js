@@ -36,10 +36,16 @@ const MRU_CAP = 50;
 let mruList = [];
 let mruRank = new Map(); // id -> position (0 = most recent)
 
+// Diagnostic switches, set from a devtools console, e.g.
+//   messenger.storage.local.set({ debug: { skipUnreadCounts: true } })
+// Read together with the MRU list so they cost no extra round trip.
+let debugSettings = {};
+
 async function loadMru() {
   try {
-    const r = await messenger.storage.local.get(["mru"]);
+    const r = await messenger.storage.local.get(["mru", "debug"]);
     mruList = Array.isArray(r.mru) ? r.mru : [];
+    debugSettings = r.debug && typeof r.debug === "object" ? r.debug : {};
   } catch (e) {
     console.warn("[palette] mru load failed", e);
     mruList = [];
@@ -86,6 +92,7 @@ async function collectMessages(list) {
   let page = list;
   while (page.id) {
     page = await messenger.messages.continueList(page.id);
+    Timing.count("selectionExtraPages");
     out.push(...page.messages);
   }
   return out;
@@ -110,25 +117,25 @@ async function applyUIFontSize() {
 // without it, `active: true` matches the active mail tab of EVERY window.
 async function captureContext() {
   try {
-    const [activeTab] = await messenger.tabs.query({ active: true, currentWindow: true });
+    const [activeTab] = await Timing.time("context: tabs.query",
+      messenger.tabs.query({ active: true, currentWindow: true }));
     const windowId = activeTab?.windowId ?? null;
-    const [mailTab] = await messenger.mailTabs.query({ active: true, currentWindow: true });
+    const [mailTab] = await Timing.time("context: mailTabs.query",
+      messenger.mailTabs.query({ active: true, currentWindow: true }));
 
     let selectedMessages = [];
     if (mailTab) {
       try {
-        selectedMessages = await collectMessages(
-          await messenger.mailTabs.getSelectedMessages(mailTab.id)
-        );
+        selectedMessages = await Timing.time("context: selected messages", async () =>
+          collectMessages(await messenger.mailTabs.getSelectedMessages(mailTab.id)));
       } catch (e) {
         console.warn("[palette] getSelectedMessages failed", e);
       }
     } else if (activeTab) {
       // Message tab or standalone message window: use the displayed message.
       try {
-        selectedMessages = await collectMessages(
-          await messenger.messageDisplay.getDisplayedMessages(activeTab.id)
-        );
+        selectedMessages = await Timing.time("context: displayed messages", async () =>
+          collectMessages(await messenger.messageDisplay.getDisplayedMessages(activeTab.id)));
       } catch {
         // Not a message-displaying tab (compose, content tab, …).
       }
@@ -138,12 +145,14 @@ async function captureContext() {
     if (activeTab?.type === "messageCompose") {
       composeTab = activeTab;
       try {
-        composeDetails = await messenger.compose.getComposeDetails(activeTab.id);
+        composeDetails = await Timing.time("context: compose details",
+          messenger.compose.getComposeDetails(activeTab.id));
       } catch (e) {
         console.warn("[palette] getComposeDetails failed", e);
       }
     }
     ctx = { mailTab: mailTab || null, windowId, selectedMessages, composeTab, composeDetails };
+    Timing.set("selectedMessages", selectedMessages.length);
   } catch (e) {
     console.warn("[palette] captureContext failed", e);
   }
@@ -719,15 +728,19 @@ queryEl.addEventListener("keydown", (e) => {
 const commandSources = [];
 
 function registerCommands(source) {
-  commandSources.push(source);
+  // Name the source after the registering script (for startup timings):
+  // "folders.js#2" = the second source registered by commands/folders.js.
+  const file = (document.currentScript?.src || "").split("/").pop() || "source";
+  const n = commandSources.filter(s => s.file === file).length + 1;
+  commandSources.push({ source, file, name: `${file}#${n}` });
 }
 
 async function buildCommands(env) {
-  const lists = await Promise.all(commandSources.map(async (source) => {
+  const lists = await Promise.all(commandSources.map(async ({ source, name }) => {
     try {
-      return (await source(env)) || [];
+      return (await Timing.time(`source: ${name}`, () => source(env))) || [];
     } catch (e) {
-      console.warn("[palette] command source failed", e);
+      console.warn("[palette] command source failed", name, e);
       return [];
     }
   }));
@@ -775,16 +788,24 @@ function runPendingCommand(pending) {
 
 // Called from popup/main.js once every command file has registered.
 async function init() {
-  const [, accounts, , , pending] = await Promise.all([
-    loadMru(),
-    messenger.accounts.list(true),
-    captureContext(),
-    applyUIFontSize(), // before first render, so the popup doesn't jump in size
-    takePendingCommand()
-  ]);
-  folderEntries = collectFolders(accounts);
-  commands = await buildCommands({ accounts });
-  refilter();
+  Timing.mark("init start");
+  const [, accounts, , , pending] = await Timing.time("init: parallel setup", Promise.all([
+    Timing.time("setup: mru + debug settings", loadMru()),
+    Timing.time("setup: accounts.list(true)", messenger.accounts.list(true)),
+    Timing.time("setup: captureContext", captureContext()),
+    Timing.time("setup: UI font size", applyUIFontSize()), // before first render, so the popup doesn't jump
+    Timing.time("setup: takePendingCommand", takePendingCommand())
+  ]));
+  folderEntries = Timing.timeSync("collectFolders", () => collectFolders(accounts));
+  Timing.set("accounts", accounts.length);
+  Timing.set("folders", folderEntries.length);
+  commands = await Timing.time("buildCommands (all sources)", buildCommands({ accounts }));
+  Timing.set("commands", commands.length);
+  Timing.timeSync("first refilter + render", () => refilter());
+  Timing.set("rowsRendered", filtered.length);
   queryEl.focus();
   if (pending) runPendingCommand(pending);
+  await Timing.time("wait for first paint", afterNextPaint());
+  Timing.mark("firstPaint");
+  await Timing.reportFirstPaint();
 }

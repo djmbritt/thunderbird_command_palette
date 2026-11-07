@@ -76,7 +76,34 @@ function buildInternalCommands() {
   ];
 }
 
+// Diagnostic: copy the saved startup timings (see popup/timing.js) to the
+// clipboard so they can be pasted into a bug report.
+async function copyStartupTimings() {
+  const { startupTimings = [] } = await messenger.storage.local.get("startupTimings");
+  const text = startupTimings.length
+    ? startupTimings.map(run => Timing.summary(run)).join("\n\n")
+    : "No startup timings recorded yet.";
+  console.log(`[palette timing] saved runs:\n${text}`);
+  try {
+    await navigator.clipboard.writeText(text);
+    await notify(`Copied ${startupTimings.length} startup timing run(s) to the clipboard`);
+  } catch (e) {
+    // Clipboard access can be refused outside a user gesture; the console
+    // copy above is the fallback.
+    console.warn("[palette timing] clipboard write failed", e);
+    await notify("Couldn't copy to the clipboard. The timings were logged to the console.");
+  }
+}
+
 registerCommands(() => [
+  {
+    id: "debug-copy-startup-timings",
+    label: "Debug: Copy Startup Timings",
+    icon: "⏱",
+    keywords: "performance slow speed profile diagnostics",
+    noHistory: true,
+    run: copyStartupTimings
+  },
   ...buildInternalCommands(),
   ...(typeof messenger.commands?.openShortcutSettings === "function" ? [{
     id: "configure-shortcuts",

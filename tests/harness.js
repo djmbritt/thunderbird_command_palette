@@ -147,13 +147,20 @@ async function loadPalette({ initialStore = {}, api = {}, activeTab = { id: 1, w
   const documentElement = { style: {} };
 
   const context = vm.createContext({
+    performance,
     console: { ...console, log() {}, warn() {} }, // keep test output clean
     messenger,
     window: { close() { state.closed = true; } },
     setTimeout, clearTimeout,
     document: { documentElement, getElementById: (id) => els[id], createElement: () => fakeElement() }
   });
-  for (const { file, src } of SCRIPTS) vm.runInContext(src, context, { filename: file });
+  // Like a browser, expose the running <script> as document.currentScript
+  // (registerCommands names command sources after it).
+  for (const { file, src } of SCRIPTS) {
+    context.document.currentScript = { src: `moz-extension://test/${path.relative(ROOT, file)}` };
+    vm.runInContext(src, context, { filename: file });
+  }
+  context.document.currentScript = null;
   await settle(); // let init() finish
 
   const key = (k) => els.query.listeners.keydown({ key: k, preventDefault() {} });
@@ -164,7 +171,7 @@ async function loadPalette({ initialStore = {}, api = {}, activeTab = { id: 1, w
 
   const hints = () => els.results.children.map(li => li.children.find(c => c.className === "row-hint")?.textContent);
   const badges = () => els.results.children.map(li => li.children.find(c => c.className === "row-badge")?.textContent);
-  return { els, calls, store, state, documentElement, key, type, labels, hints, badges, selectedLabel };
+  return { context, els, calls, store, state, documentElement, key, type, labels, hints, badges, selectedLabel };
 }
 
 const unifiedFolder = (type) => ({ id: `unified-${type}-id`, name: type, isUnified: true, specialUse: [type] });
