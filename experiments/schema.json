@@ -36,6 +36,13 @@
             "description": "WebExtension account ID to focus. Omit for first account."
           }
         ]
+      },
+      {
+        "name": "getUIFontSize",
+        "type": "function",
+        "description": "Return Thunderbird's UI font size in CSS pixels: the user's explicit setting (mail.uifontsize pref) if set, otherwise the main window's computed font size. Returns 0 if neither is available.",
+        "async": true,
+        "parameters": []
       }
     ]
   }

@@ -62,7 +62,7 @@ function folder(id, name, extra = {}) {
 }
 
 // Load a fresh palette with the given selection. Returns helpers to drive it.
-async function loadPalette({ selected } = {}) {
+async function loadPalette({ selected, palette } = {}) {
   const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"] });
   const projects = folder("a1://Projects", "Projects");
   const savedSearch = folder("a1://Saved", "Saved Search", { isVirtual: true });
@@ -97,7 +97,8 @@ async function loadPalette({ selected } = {}) {
       update: record("update"),
       delete: record("delete"),
       archive: record("archive")
-    }
+    },
+    palette // experiment API; undefined = experiment not loaded
   };
 
   const els = {
@@ -108,12 +109,13 @@ async function loadPalette({ selected } = {}) {
     "esc-action": fakeElement({ id: "esc-action", textContent: "close" })
   };
   const state = { closed: false };
+  const documentElement = { style: {} };
 
   const context = vm.createContext({
     console: { ...console, log() {}, warn() {} }, // keep test output clean
     messenger,
     window: { close() { state.closed = true; } },
-    document: { getElementById: (id) => els[id], createElement: () => fakeElement() }
+    document: { documentElement, getElementById: (id) => els[id], createElement: () => fakeElement() }
   });
   vm.runInContext(FUZZY_SRC, context);
   vm.runInContext(PALETTE_SRC, context);
@@ -125,7 +127,7 @@ async function loadPalette({ selected } = {}) {
   const labels = () => els.results.children.map(rowText);
   const selectedLabel = () => rowText(els.results.children.find(li => li.classList.contains("selected")));
 
-  return { els, calls, store, state, key, type, labels, selectedLabel };
+  return { els, calls, store, state, documentElement, key, type, labels, selectedLabel };
 }
 
 const settle = () => new Promise(r => setTimeout(r, 10));
@@ -250,4 +252,23 @@ test("Toggle Flag on a mixed selection flags all", async () => {
     ["update", 101, { flagged: true }],
     ["update", 102, { flagged: true }]
   ]);
+});
+
+test("root font size follows Thunderbird's UI font size", async () => {
+  const p = await loadPalette({ palette: { getNewMail() {}, getUIFontSize: async () => 18 } });
+  assert.equal(p.documentElement.style.fontSize, "18px");
+});
+
+test("implausible UI font sizes are ignored", async () => {
+  for (const bad of [0, 3, 200, NaN]) {
+    const p = await loadPalette({ palette: { getNewMail() {}, getUIFontSize: async () => bad } });
+    assert.equal(p.documentElement.style.fontSize, undefined, `size ${bad}`);
+  }
+});
+
+test("without the experiment the CSS default font size is kept", async () => {
+  const p = await loadPalette();
+  assert.equal(p.documentElement.style.fontSize, undefined);
+  p.type("move");
+  assert.equal(p.labels()[0], "Move to Folder…", "palette still works");
 });

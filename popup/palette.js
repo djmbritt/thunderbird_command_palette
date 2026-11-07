@@ -88,6 +88,20 @@ async function collectMessages(list) {
 // Capture the mail context of the window the palette was opened from.
 // `currentWindow` scopes the query to the window hosting the action popup —
 // without it, `active: true` matches the active mail tab of EVERY window.
+// Scale the palette with Thunderbird's UI font size. All text sizes in
+// palette.css are rem, so setting the root font size scales everything.
+// Without the experiment, the CSS fallback (15px) applies.
+async function applyUIFontSize() {
+  if (typeof messenger.palette?.getUIFontSize !== "function") return;
+  try {
+    const px = await messenger.palette.getUIFontSize();
+    // Ignore missing/implausible values rather than render something unusable.
+    if (px >= 8 && px <= 40) document.documentElement.style.fontSize = `${px}px`;
+  } catch (e) {
+    console.warn("[palette] getUIFontSize failed", e);
+  }
+}
+
 async function captureContext() {
   try {
     const [activeTab] = await messenger.tabs.query({ active: true, currentWindow: true });
@@ -695,7 +709,8 @@ async function init() {
   const [, accounts] = await Promise.all([
     loadMru(),
     messenger.accounts.list(true),
-    captureContext()
+    captureContext(),
+    applyUIFontSize() // before first render, so the popup doesn't jump in size
   ]);
   folderEntries = collectFolders(accounts);
   const folderCommands = buildFolderCommands(folderEntries);

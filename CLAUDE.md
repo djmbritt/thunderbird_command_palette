@@ -47,6 +47,8 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 
 ### Styling
 
+**Font size follows Thunderbird.** Every text size, padding and the popup's width/height are in `rem`. On init, `applyUIFontSize()` sets `<html>` font-size from `messenger.palette.getUIFontSize()` (accepted range 8–40px), before the first render so the popup doesn't jump. Without the experiment the CSS fallback `html { font-size: 15px }` applies. Design base is 15px = 1rem, so a 12px design value is `0.8rem`. Keep borders, radii and accent bars in px. Popup size is `min(40rem, 800px)` × `min(26.67rem, 600px)`. Gecko caps popup size near 800×600.
+
 All colours are CSS variables on `:root`, with a `@media (prefers-color-scheme: dark)` override block — extension pages follow the Thunderbird/system theme. Add new colours to **both** blocks. Use `scrollbar-width`/`scrollbar-color` (Gecko), not `::-webkit-scrollbar`. The footer's Esc label (`#esc-action`) reads "close" in the root list and "back" in a picker.
 
 ### Picker mode (Move / Copy to Folder…)
@@ -95,16 +97,18 @@ Folders are added as `Go to: <name>` with the breadcrumb (`<account> · <parent 
 messenger.palette.getNewMail(accountId?)          // omit accountId for all accounts
 messenger.palette.openSettings()                  // opens about:preferences in a tab
 messenger.palette.openAccountSettings(accountId?)
+messenger.palette.getUIFontSize()               // px; 0 if unknown
 ```
 
 Implementation strategy:
 - **Main window**: only `Services.wm.getMostRecentWindow("mail:3pane")`. No fallback to `getMostRecentWindow(null)` — that can return a compose/message window lacking `goDoCommand`/`msgWindow`.
 - **All-accounts get new mail** uses `win.goDoCommand("cmd_getMsgsForAuthAccounts")` — same command as the toolbar's "Get All New Messages".
 - **Per-account get new mail** maps the MailExtension `accountId` (= `nsIMsgAccount.key`) via `MailServices.accounts.accounts`, then calls `server.getNewMessages(rootFolder, msgWindow, null)`, falling back to `server.performBiff`. The popup does not list per-account entries for Local Folders (`type === "none"`).
+- **UI font size** returns the `mail.uifontsize` pref if > 0 (the user's explicit Thunderbird font-size choice), else the main window's computed root font size (the default, which follows the OS).
 - **Open Settings** tries `win.openPreferencesTab()`, then `openContentTab("about:preferences")`, then throws.
 - **Open Account Settings** tries `win.MsgAccountManager(null, server)`, then `openAccountSettingsTab({server})`, then throws.
 
-The popup feature-detects `messenger.palette` and skips these commands if the experiment fails to load. See `HAS_EXPERIMENT` in `popup/palette.js`.
+The popup feature-detects `messenger.palette` (and `getUIFontSize` separately) and skips these commands if the experiment fails to load. See `HAS_EXPERIMENT` in `popup/palette.js`.
 
 ### Caveats for the experiment
 
@@ -150,7 +154,8 @@ Tests: `node --test tests/` (no dependencies). When adding a command, extend the
 
 - **The shortcut is per-Thunderbird-window**, not OS-global. Won't fire when Thunderbird is in the background.
 - **The popup is anchored to the toolbar action button**, not centered like VSCode's palette. A centered, embedded overlay would need a privileged XUL overlay through an Experiment.
-- **Experiment API surface is small.** `getNewMail`, `openSettings`, `openAccountSettings`. Most other toolbar-style actions can be added as `goDoCommand("cmd_*")` on the main window.
+- **Experiment API surface is small.** `getNewMail`, `openSettings`, `openAccountSettings`, `getUIFontSize`. Most other toolbar-style actions can be added as `goDoCommand("cmd_*")` on the main window.
+- **Font size is read when the popup opens.** Changing Thunderbird's font size takes effect the next time the palette opens, not while it's open.
 - **Tests use fakes.** `tests/palette.test.js` checks popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. It can't catch Thunderbird API signature or permission mismatches, or anything in `experiments/` — verify those in Thunderbird.
 
 ## Packaging

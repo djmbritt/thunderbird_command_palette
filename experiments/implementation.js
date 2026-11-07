@@ -75,6 +75,20 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
           win.goDoCommand("cmd_getMsgsForAuthAccounts");
         },
 
+        async getUIFontSize() {
+          // Explicit user choice (Settings → General → Font size for the UI,
+          // or View → Font Size). 0 means "use the default".
+          const pref = Services.prefs.getIntPref("mail.uifontsize", 0);
+          if (pref > 0) return pref;
+
+          // Default: whatever the main window actually renders at, which
+          // already reflects the OS/system font size.
+          const win = getMainWindow();
+          if (!win) return 0;
+          const px = parseFloat(win.getComputedStyle(win.document.documentElement).fontSize);
+          return Number.isFinite(px) ? Math.round(px) : 0;
+        },
+
         async openSettings() {
           const win = getMainWindow();
           if (!win) throw new Error("No Thunderbird main window available");
