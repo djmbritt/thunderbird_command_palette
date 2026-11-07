@@ -47,6 +47,10 @@ function fakeElement(init = {}) {
     setAttribute(k, v) { this.attrs[k] = v; },
     removeAttribute(k) { delete this.attrs[k]; },
     appendChild(c) { this.children.push(c); },
+    replaceChildren(...nodes) {
+      this.children = nodes;
+      text = nodes.map(n => n.textContent).join("");
+    },
     querySelector() { return this.children.find(c => c.className === "row-label"); },
     focus() {},
     scrollIntoView() {},
@@ -165,7 +169,7 @@ async function loadPalette({ initialLocalStorage = {}, initialStore = {}, api = 
     messenger,
     window: { close() { state.closed = true; } },
     setTimeout, clearTimeout,
-    document: { documentElement, getElementById: (id) => els[id], createElement: () => fakeElement() }
+    document: { documentElement, getElementById: (id) => els[id], createElement: () => fakeElement(), createTextNode: (t) => ({ nodeType: 3, textContent: t }) }
   });
   // Like a browser, expose the running <script> as document.currentScript
   // (registerCommands names command sources after it).

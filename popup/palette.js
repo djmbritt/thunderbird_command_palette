@@ -586,7 +586,7 @@ function afterNextPaint() {
 // the initial render only; a newer render cancels a pending append.
 function render({ firstChunk = false } = {}) {
   const token = ++renderToken;
-  resultsEl.innerHTML = "";
+  resultsEl.replaceChildren();
   rowEls = [];
   emptyEl.hidden = filtered.length > 0;
 
@@ -668,7 +668,13 @@ function paintRow(i) {
   if (armed) {
     label.textContent = `Press Enter again to confirm: ${entry.cmd.label}`;
   } else {
-    label.innerHTML = Fuzzy.highlight(entry.cmd.label, entry.positions);
+    label.replaceChildren(...Fuzzy.segments(entry.cmd.label, entry.positions).map(({ text, match }) => {
+      if (!match) return document.createTextNode(text);
+      const span = document.createElement("span");
+      span.className = "row-match";
+      span.textContent = text;
+      return span;
+    }));
   }
 }
 

@@ -32,10 +32,15 @@ test("word-boundary initials match", () => {
   assert.deepEqual(positions, [0, 6]);
 });
 
-test("highlight wraps runs and escapes HTML", () => {
-  assert.equal(
-    Fuzzy.highlight("a<b>c", [0, 1]),
-    '<span class="row-match">a&lt;</span>b&gt;c'
-  );
-  assert.equal(Fuzzy.highlight("R&D", []), "R&amp;D");
+test("segments splits a label into matched and unmatched runs", () => {
+  assert.deepEqual(Fuzzy.segments("a<b>c", [0, 1]), [
+    { text: "a<", match: true },
+    { text: "b>c", match: false }
+  ]);
+  assert.deepEqual(Fuzzy.segments("R&D", []), [{ text: "R&D", match: false }]);
+  assert.deepEqual(Fuzzy.segments("Reply All", [0, 6]), [
+    { text: "R", match: true }, { text: "eply ", match: false },
+    { text: "A", match: true }, { text: "ll", match: false }
+  ]);
+  assert.deepEqual(Fuzzy.segments("", [0]), []);
 });

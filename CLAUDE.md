@@ -130,7 +130,7 @@ popup/commands/thunderbird.js  Experiment-backed: Undo/Redo, Compact, Expand/Col
 popup/commands/navigation.js   Switch to Tab…, Write to… (contacts), Open Calendar/Tasks/Chat.
 popup/commands/folders.js      Mark Folder as Read, Favorites toggle, Empty Trash, Go to: Unified …, Go to: <folder>.
 popup/commands/search.js       "?" message search provider.
-lib/fuzzy.js                   Subsequence scorer + highlight(). Loads in the popup (window.Fuzzy) and Node (module.exports).
+lib/fuzzy.js                   Subsequence scorer + segments() for highlighting (rendered as DOM nodes; never set innerHTML). Loads in the popup (window.Fuzzy) and Node (module.exports).
 lib/vcard.js                   Minimal vCard reader (FN/N + EMAIL) for contacts. Popup (window.VCard) and Node.
 tests/harness.js               Loads the popup scripts (palette.html order) into a vm with a fake DOM + fake messenger.*; loadPalette() options documented at the top.
 tests/palette.test.js          Core behaviour: pickers, confirm flow, MRU, folders, unified, panes, junk.

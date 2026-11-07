@@ -482,3 +482,12 @@ test("an implausible cached font size is ignored", async () => {
   const p = await loadPalette({ selected: [], initialLocalStorage: { uiFontSize: "300" } });
   assert.equal(p.documentElement.style.fontSize, undefined);
 });
+
+test("matched letters are highlighted with span elements (no HTML strings)", async () => {
+  const p = await loadPalette();
+  p.type("arch");
+  const label = p.els.results.children[0].children[1];
+  const rendered = label.children.map(c => (c.className === "row-match" ? `[${c.textContent}]` : c.textContent)).join("");
+  assert.equal(rendered, "[Arch]ive");
+  assert.equal(label.innerHTML, "", "innerHTML is never set");
+});
