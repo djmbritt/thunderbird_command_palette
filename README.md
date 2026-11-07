@@ -95,4 +95,5 @@ After loading the add-on temporarily, click **Reload** on the Debug Add-ons page
 - [x] Undo can undo moves made from the palette (Thunderbird 140+)
 - [ ] try it on Thunderbird 128 ESR (the e2e tests only cover the installed version)
 - [x] take the listing screenshots (`store/screenshots/`)
-- [ ] publish on addons.thunderbird.net: choose the release version, submit
+- [x] choose the release version (1.0.0)
+- [ ] publish on addons.thunderbird.net
