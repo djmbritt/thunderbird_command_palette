@@ -62,7 +62,7 @@ function folder(id, name, extra = {}) {
 }
 
 // Load a fresh palette with the given selection. Returns helpers to drive it.
-async function loadPalette({ selected, palette } = {}) {
+async function loadPalette({ selected, palette, unifiedInbox = UNIFIED_INBOX, mailTabsUpdate, extraFolders = [] } = {}) {
   const inbox = folder("a1://INBOX", "Inbox", { specialUse: ["inbox"] });
   const projects = folder("a1://Projects", "Projects");
   const savedSearch = folder("a1://Saved", "Saved Search", { isVirtual: true });
@@ -83,12 +83,19 @@ async function loadPalette({ selected, palette } = {}) {
     accounts: {
       list: async () => [{
         id: "a1", name: "Work", type: "imap",
-        rootFolder: folder("a1://", "", { isRoot: true, path: "/", subFolders: [inbox, projects, savedSearch] })
+        rootFolder: folder("a1://", "", { isRoot: true, path: "/", subFolders: [inbox, projects, savedSearch, ...extraFolders] })
       }]
     },
-    tabs: { query: async () => [{ id: 1, windowId: 10 }] },
+    tabs: { query: async () => [{ id: 1, windowId: 10 }], update: async () => {} },
+    windows: { getAll: async () => [{ id: 10, focused: true }] },
+    folders: unifiedInbox === null ? {} : { getUnifiedFolder: async (type) => (type === "inbox" ? unifiedInbox : null) },
     mailTabs: {
       query: async () => [{ id: 1, windowId: 10 }],
+      update: async (...args) => {
+        calls.push(plain(["mailTabs.update", ...args]));
+        if (mailTabsUpdate) await mailTabsUpdate(...args);
+      },
+      create: record("mailTabs.create"),
       getSelectedMessages: async () => ({ id: null, messages })
     },
     messages: {
@@ -129,6 +136,8 @@ async function loadPalette({ selected, palette } = {}) {
 
   return { els, calls, store, state, documentElement, key, type, labels, selectedLabel };
 }
+
+const UNIFIED_INBOX = { id: "unified-inbox-id", name: "Inbox", isUnified: true, specialUse: ["inbox"] };
 
 const settle = () => new Promise(r => setTimeout(r, 10));
 
@@ -271,4 +280,50 @@ test("without the experiment the CSS default font size is kept", async () => {
   assert.equal(p.documentElement.style.fontSize, undefined);
   p.type("move");
   assert.equal(p.labels()[0], "Move to Folder…", "palette still works");
+});
+
+test("Go to: Unified Inbox ranks first for 'unified' and opens it", async () => {
+  const p = await loadPalette({ selected: [] });
+  p.type("unified");
+  assert.equal(p.labels()[0], "Go to: Unified Inbox");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { displayedFolderId: "unified-inbox-id" }]]);
+  assert.deepEqual(p.store.mru, ["goto-unified-inbox"]);
+});
+
+test("typing 'inbox' offers both the unified and per-account inbox", async () => {
+  const p = await loadPalette({ selected: [] });
+  p.type("inbox");
+  const top = p.labels().slice(0, 2).sort();
+  assert.deepEqual(top, ["Go to: Inbox", "Go to: Unified Inbox"]);
+});
+
+test("Unified Inbox retries with folderMode 'unified' if the plain update is rejected", async () => {
+  const p = await loadPalette({
+    selected: [],
+    mailTabsUpdate: async (_id, props) => {
+      if (!props.folderMode) throw new Error("folder not shown in current mode");
+    }
+  });
+  p.type("unified inbox");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [
+    ["mailTabs.update", 1, { displayedFolderId: "unified-inbox-id" }],
+    ["mailTabs.update", 1, { displayedFolderId: "unified-inbox-id", folderMode: "unified" }]
+  ]);
+});
+
+test("no Unified Inbox command when the API is unavailable", async () => {
+  const p = await loadPalette({ selected: [], unifiedInbox: null });
+  p.type("unified");
+  assert.ok(!p.labels().includes("Go to: Unified Inbox"));
+});
+
+test("unified folders inside an account tree are not listed twice", async () => {
+  const p = await loadPalette({ selected: [], extraFolders: [{ ...UNIFIED_INBOX, path: "/Inbox", subFolders: [] }] });
+  p.type(""); // full, unfiltered list
+  assert.equal(p.labels().filter(l => l === "Go to: Unified Inbox").length, 1);
+  assert.equal(p.labels().filter(l => l === "Go to: Inbox").length, 1, "only the real account Inbox");
 });

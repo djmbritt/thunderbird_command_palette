@@ -350,17 +350,16 @@ function collectFolders(accounts) {
     // marks it explicitly with isRoot. (Older builds may not set isRoot;
     // fall back to a path === "/" check.)
     const isRoot = folder.isRoot === true || folder.path === "/" || folder.path === "";
-    if (!isRoot) {
+    // Unified folders are covered by buildUnifiedCommands(); skip them here in
+    // case a Thunderbird version includes them in an account tree.
+    if (!isRoot && !folder.isUnified) {
       out.push({
         folder,
-        // Mark unified folders explicitly so the user can tell "Inbox" (per-
-        // account) apart from the cross-account aggregate.
-        displayName: folder.isUnified ? `Unified ${folder.name}` : folder.name,
+        displayName: folder.name,
         breadcrumb: parentPath ? `${accountName} · ${parentPath}` : accountName,
         icon: specialIcon(folder.specialUse),
-        // Match against account + path + special-use tags. "unified" lets
-        // users find the aggregate folder by typing it.
-        keywords: `${accountName} ${folder.path || ""} ${(folder.specialUse || []).join(" ")}${folder.isUnified ? " unified" : ""}`
+        // Match against account + path + special-use tags.
+        keywords: `${accountName} ${folder.path || ""} ${(folder.specialUse || []).join(" ")}`
       });
     }
     const childParentPath = isRoot
@@ -387,6 +386,29 @@ function buildFolderCommands(entries) {
     keywords: e.keywords,
     run: () => switchToFolder(e.folder)
   }));
+}
+
+// "Go to: Unified Inbox". folders.getUnifiedFolder (TB 127+) returns the
+// cross-account aggregate folder; it has no accountId and isn't part of any
+// account's folder tree. Skipped silently if unavailable.
+async function buildUnifiedCommands() {
+  if (typeof messenger.folders?.getUnifiedFolder !== "function") return [];
+  try {
+    const folder = await messenger.folders.getUnifiedFolder("inbox");
+    if (!folder) return [];
+    return [{
+      id: "goto-unified-inbox", // stable: unified folder ids are per-session
+      label: "Go to: Unified Inbox",
+      nameStart: "Go to: ".length,
+      hint: "All accounts",
+      icon: "📥",
+      keywords: "unified all inboxes combined smart",
+      run: () => switchToFolder(folder, { retryProps: { folderMode: "unified" } })
+    }];
+  } catch (e) {
+    console.warn("[palette] getUnifiedFolder failed", e);
+    return [];
+  }
 }
 
 function selectionText() {
@@ -426,10 +448,13 @@ function specialIcon(specialUse) {
   return "▸";
 }
 
-async function switchToFolder(folder) {
+// `retryProps` are extra MailTabProperties to retry with if the plain
+// update is rejected, e.g. { folderMode: "unified" } for unified folders
+// when the folder pane isn't showing the unified view.
+async function switchToFolder(folder, { retryProps } = {}) {
   if (!folder.id) throw new Error("Folder has no id");
-  // MV3 strictly validates this schema — only displayedFolderId is allowed.
-  // Folder IDs are URL-style strings like "account1://INBOX".
+  // MV3 validates MailTabProperties strictly; pass only known keys
+  // (displayedFolderId, folderMode, …). Folder IDs are opaque strings.
   const updateProps = { displayedFolderId: folder.id };
 
   // Prefer the window the palette was opened from; fall back to any normal
@@ -463,6 +488,18 @@ async function switchToFolder(folder) {
 
   try {
     await messenger.mailTabs.update(mailTab.id, updateProps);
+    return;
+  } catch (e) {
+    if (!retryProps) {
+      console.warn("[palette] mailTabs.update failed, opening new mail tab", e);
+      await messenger.mailTabs.create({ ...updateProps, windowId: mailTab.windowId });
+      return;
+    }
+    console.warn("[palette] mailTabs.update failed, retrying with", retryProps, e);
+  }
+
+  try {
+    await messenger.mailTabs.update(mailTab.id, { ...updateProps, ...retryProps });
   } catch (e) {
     // Last resort: open the folder in a new mail tab in the same window.
     console.warn("[palette] mailTabs.update failed, opening new mail tab", e);
@@ -706,16 +743,17 @@ queryEl.addEventListener("keydown", (e) => {
 
 async function init() {
   // Load MRU and accounts in parallel — neither depends on the other.
-  const [, accounts] = await Promise.all([
+  const [, accounts, , , unifiedCommands] = await Promise.all([
     loadMru(),
     messenger.accounts.list(true),
     captureContext(),
-    applyUIFontSize() // before first render, so the popup doesn't jump in size
+    applyUIFontSize(), // before first render, so the popup doesn't jump in size
+    buildUnifiedCommands()
   ]);
   folderEntries = collectFolders(accounts);
   const folderCommands = buildFolderCommands(folderEntries);
   const experimentCommands = buildExperimentCommands(accounts);
-  commands = [...STATIC_ACTIONS, ...experimentCommands, ...folderCommands];
+  commands = [...STATIC_ACTIONS, ...experimentCommands, ...unifiedCommands, ...folderCommands];
   refilter();
   queryEl.focus();
 }
