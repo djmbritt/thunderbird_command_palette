@@ -45,14 +45,17 @@ async function tabPicker() {
 
 // ---- Write to… -------------------------------------------------------------
 //
-// Lists local address-book contacts (remote/LDAP books need a search string,
-// so they're skipped) and starts a new message to the chosen address. One
-// item per email address. Capped so a huge address book stays responsive.
+// Lists local address-book contacts and starts a new message to the chosen
+// address. One item per email address. Capped so a huge address book stays
+// responsive. Uses contacts.list per book: contacts.query returns nothing
+// without a search string (Thunderbird's implementation), and remote (LDAP)
+// books can only be searched, not listed, so they're skipped.
 const CONTACT_LIMIT = 3000;
 
 /** @returns {Promise<PickerSpec>} */
 async function contactPicker() {
-  const nodes = await messenger.addressBooks.contacts.query({ includeRemote: false });
+  const books = (await messenger.addressBooks.list(false)).filter(book => !book.remote);
+  const nodes = (await Promise.all(books.map(book => messenger.addressBooks.contacts.list(book.id)))).flat();
   const items = [];
   for (const node of nodes) {
     const { name, emails } = VCard.parse(node.vCard);
@@ -96,7 +99,7 @@ registerCommands(() => [
     keywords: "tabs go window",
     picker: tabPicker
   },
-  ...(typeof messenger.addressBooks?.contacts?.query === "function" ? [{
+  ...(typeof messenger.addressBooks?.contacts?.list === "function" ? [{
     id: "write-to",
     label: "Write to…",
     icon: "✉",

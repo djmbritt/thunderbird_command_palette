@@ -10,9 +10,11 @@ const LAYOUTS = [
   { layout: "vertical", name: "Vertical View", icon: "◫" }
 ];
 
-// Quick filters. setQuickFilter is given the full boolean state each time, so
-// each command replaces the current filter rather than stacking onto it
-// (the API doesn't document whether omitted fields are kept).
+// Quick filters. setQuickFilter clears every filter first and then applies
+// the given state, so each command replaces the current filter. Only pass the
+// filters to turn on: `false` doesn't mean "off", it sets the inverted filter
+// ("unread: false" = only read messages). Verified against Thunderbird 158's
+// ext-mailTabs.js and in the e2e tests.
 const QUICK_FILTERS = [
   { id: "unread", name: "Unread", icon: "○", keywords: "new" },
   { id: "flagged", name: "Starred", icon: "★", keywords: "flagged" },
@@ -20,7 +22,6 @@ const QUICK_FILTERS = [
   { id: "contact", name: "From Contacts", icon: "☺", keywords: "address book people known" },
   { id: "tags", name: "Tagged", icon: "●", keywords: "tags labels" }
 ];
-const CLEAR_FILTER = { unread: false, flagged: false, attachment: false, contact: false, tags: false };
 
 /** @returns {Command[]} */
 function quickFilterCommands() {
@@ -31,7 +32,7 @@ function quickFilterCommands() {
       icon: f.icon,
       keywords: `quick filter show only ${f.keywords}`,
       requires: "mailTab",
-      run: () => messenger.mailTabs.setQuickFilter(requireMailTab().tabId, { ...CLEAR_FILTER, [f.id]: true, show: true })
+      run: () => messenger.mailTabs.setQuickFilter(requireMailTab().tabId, { [f.id]: true, show: true })
     })),
     {
       id: "quick-filter-clear",
@@ -39,7 +40,7 @@ function quickFilterCommands() {
       icon: "⊘",
       keywords: "quick filter reset remove show all",
       requires: "mailTab",
-      run: () => messenger.mailTabs.setQuickFilter(requireMailTab().tabId, { ...CLEAR_FILTER, text: { text: "" } })
+      run: () => messenger.mailTabs.setQuickFilter(requireMailTab().tabId, {})
     }
   ];
 }

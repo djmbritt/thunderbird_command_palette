@@ -17,6 +17,13 @@ var { ExtensionCommon } = ChromeUtils.importESModule(
 var { MailServices } = ChromeUtils.importESModule(
   "resource:///modules/MailServices.sys.mjs"
 );
+// Errors thrown to the extension must be ExtensionErrors: for any other
+// error, Thunderbird hides the message and the popup only sees "An unexpected
+// error occurred".
+var { ExtensionUtils } = ChromeUtils.importESModule(
+  "resource://gre/modules/ExtensionUtils.sys.mjs"
+);
+var { ExtensionError } = ExtensionUtils;
 
 // `Services` is auto-available as a global in privileged JSM/sys.mjs scope.
 
@@ -85,7 +92,7 @@ function dispatchCommand(win, command) {
     controller.doCommand(command);
     return;
   }
-  throw new Error(disabled
+  throw new ExtensionError(disabled
     ? `${command} is not available right now`
     : `${command} is not supported by this Thunderbird version`);
 }
@@ -96,13 +103,13 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
       palette: {
         async getNewMail(accountId) {
           const win = getMainWindow();
-          if (!win) throw new Error("No Thunderbird main window available");
+          if (!win) throw new ExtensionError("No Thunderbird main window available");
 
           if (accountId) {
             const account = findAccountByExtId(accountId);
-            if (!account) throw new Error(`Account not found: ${accountId}`);
+            if (!account) throw new ExtensionError(`Account not found: ${accountId}`);
             const server = account.incomingServer;
-            if (!server) throw new Error(`Account has no incoming server: ${accountId}`);
+            if (!server) throw new ExtensionError(`Account has no incoming server: ${accountId}`);
 
             // RSS, Local Folders, etc. don't support getNewMessages — fall back to biff.
             try {
@@ -111,7 +118,7 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
               try {
                 server.performBiff(win.msgWindow || null);
               } catch (e2) {
-                throw new Error(
+                throw new ExtensionError(
                   `Server ${server.prettyName} does not support fetching new mail: ${e2.message}`
                 );
               }
@@ -140,37 +147,40 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
         },
 
         async runCommand(command) {
-          if (!ALLOWED_COMMANDS.has(command)) throw new Error(`Command not allowed: ${command}`);
+          if (!ALLOWED_COMMANDS.has(command)) throw new ExtensionError(`Command not allowed: ${command}`);
           const win = getMainWindow();
-          if (!win) throw new Error("No Thunderbird main window available");
+          if (!win) throw new ExtensionError("No Thunderbird main window available");
           dispatchCommand(win, command);
         },
 
         async toggleTodayPane() {
           const win = getMainWindow();
-          if (!win) throw new Error("No Thunderbird main window available");
-          // TodayPane is the calendar Today pane controller in the main window.
-          if (typeof win.TodayPane?.toggleVisibility !== "function") {
-            throw new Error("Today pane is not available on this Thunderbird version");
+          if (!win) throw new ExtensionError("No Thunderbird main window available");
+          // Fire the main window's own Today pane command (what View → Today
+          // Pane runs). TodayPane.toggleVisibility() can't be called directly:
+          // it needs the command's event to toggle the command's checked state.
+          const command = win.document.getElementById("calendar_toggle_todaypane_command");
+          if (!command) {
+            throw new ExtensionError("Today pane is not available on this Thunderbird version");
           }
-          win.TodayPane.toggleVisibility();
+          command.doCommand();
         },
 
         async openSpace(name) {
-          if (!ALLOWED_SPACES.has(name)) throw new Error(`Space not allowed: ${name}`);
+          if (!ALLOWED_SPACES.has(name)) throw new ExtensionError(`Space not allowed: ${name}`);
           const win = getMainWindow();
-          if (!win) throw new Error("No Thunderbird main window available");
+          if (!win) throw new ExtensionError("No Thunderbird main window available");
           const toolbar = win.gSpacesToolbar;
           const space = toolbar?.spaces?.find(sp => sp.name === name);
           if (!space || typeof toolbar.openSpace !== "function") {
-            throw new Error(`Space "${name}" cannot be opened on this Thunderbird version`);
+            throw new ExtensionError(`Space "${name}" cannot be opened on this Thunderbird version`);
           }
           toolbar.openSpace(win.document.getElementById("tabmail"), space);
         },
 
         async openSettings() {
           const win = getMainWindow();
-          if (!win) throw new Error("No Thunderbird main window available");
+          if (!win) throw new ExtensionError("No Thunderbird main window available");
 
           // Try the modern API first (TB 115+ exposes openPreferencesTab on
           // the 3pane window). Fall back through known older paths.
@@ -184,12 +194,12 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
           }
           // No goDoCommand fallback: it silently no-ops on unknown command
           // ids instead of throwing, so it would mask the failure.
-          throw new Error("Settings cannot be opened on this Thunderbird version");
+          throw new ExtensionError("Settings cannot be opened on this Thunderbird version");
         },
 
         async openAccountSettings(accountId) {
           const win = getMainWindow();
-          if (!win) throw new Error("No Thunderbird main window available");
+          if (!win) throw new ExtensionError("No Thunderbird main window available");
 
           let server = null;
           if (accountId) {
@@ -208,7 +218,7 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
             win.openAccountSettingsTab({ server });
             return;
           }
-          throw new Error("Account Settings cannot be opened on this Thunderbird version");
+          throw new ExtensionError("Account Settings cannot be opened on this Thunderbird version");
         }
       }
     };

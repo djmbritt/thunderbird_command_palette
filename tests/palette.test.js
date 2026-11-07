@@ -151,6 +151,45 @@ test("without the experiment the CSS default font size is kept", async () => {
   assert.equal(p.labels()[0], "Move to Folder…", "palette still works");
 });
 
+test("on Thunderbird 140+ moves are undoable (isUserAction)", async () => {
+  const p = await loadPalette({ api: () => ({ runtime: { getBrowserInfo: async () => ({ version: "140.0" }) } }) });
+  p.type("move");
+  p.key("Enter");
+  p.type("proj");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["move", [101, 102], "a1://Projects", { isUserAction: true }]]);
+});
+
+test("before Thunderbird 140 moves pass no options (128 rejects isUserAction)", async () => {
+  const p = await loadPalette({ api: () => ({ runtime: { getBrowserInfo: async () => ({ version: "128.5.0" }) } }) });
+  p.type("move");
+  p.key("Enter");
+  p.type("proj");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [["move", [101, 102], "a1://Projects"]]);
+});
+
+for (const [version, permanently] of [["128.0", true], ["140.0", { deletePermanently: true }]]) {
+  test(`Empty Trash uses the Thunderbird ${version} form of permanent delete`, async () => {
+    const trash = { id: "a1://Trash", name: "Trash", specialUse: ["trash"] };
+    const p = await loadPalette({
+      selected: [],
+      api: (rec) => ({
+        runtime: { getBrowserInfo: async () => ({ version }) },
+        folders: { query: async ({ specialUse }) => (specialUse?.includes("trash") ? [trash] : []) },
+        messages: { list: async () => ({ id: null, messages: [{ id: 7 }] }), delete: rec("delete") }
+      })
+    });
+    p.type("empty trash");
+    p.key("Enter");
+    p.key("Enter"); // destructive: confirm
+    await settle();
+    assert.deepEqual(p.calls, [["delete", [7], permanently]]);
+  });
+}
+
 test("Go to: Unified Inbox ranks first for 'unified inbox' and opens it", async () => {
   const p = await loadPalette({ selected: [] });
   p.type("unified inbox");

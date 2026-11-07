@@ -19,17 +19,16 @@ test("Filter: Unread sets only the unread quick filter", async () => {
   assert.equal(p.labels()[0], "Filter: Unread");
   p.key("Enter");
   await settle();
-  assert.deepEqual(p.calls, [["setQuickFilter", 1,
-    { unread: true, flagged: false, attachment: false, contact: false, tags: false, show: true }]]);
+  // Only the filter to turn on: `false` would set the inverted filter.
+  assert.deepEqual(p.calls, [["setQuickFilter", 1, { unread: true, show: true }]]);
 });
 
-test("Filter: Clear resets every quick filter including text", async () => {
+test("Filter: Clear passes no filters (setQuickFilter clears everything first)", async () => {
   const p = await loadPalette({ selected: [], api: (rec) => ({ mailTabs: { setQuickFilter: rec("setQuickFilter") } }) });
   p.type("filter clear");
   p.key("Enter");
   await settle();
-  assert.deepEqual(p.calls, [["setQuickFilter", 1,
-    { unread: false, flagged: false, attachment: false, contact: false, tags: false, text: { text: "" } }]]);
+  assert.deepEqual(p.calls, [["setQuickFilter", 1, {}]]);
 });
 
 test("Sort by marks the current column and keeps the direction", async () => {
@@ -230,11 +229,16 @@ test("Write to… lists contacts from vCards and composes to the chosen one", as
   const p = await loadPalette({
     selected: [],
     api: (rec) => ({
-      addressBooks: { contacts: { query: async () => [
-        { id: "c1", vCard: vcard("Zoe Zed", "zoe@z.org") },
-        { id: "c2", vCard: vcard("Smith\\, Ann", "ann@work.org", "ann@home.org") },
-        { id: "c3", vCard: vcard("No Email") }
-      ] } },
+      addressBooks: {
+        list: async () => [{ id: "ab1" }, { id: "ldap", remote: true }],
+        contacts: {
+          list: async (bookId) => (bookId === "ab1" ? [
+            { id: "c1", vCard: vcard("Zoe Zed", "zoe@z.org") },
+            { id: "c2", vCard: vcard("Smith\\, Ann", "ann@work.org", "ann@home.org") },
+            { id: "c3", vCard: vcard("No Email") }
+          ] : Promise.reject(new Error("remote books can't be listed")))
+        }
+      },
       compose: { beginNew: rec("beginNew") }
     })
   });

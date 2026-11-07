@@ -23,6 +23,7 @@ zip -r -FS "${OUT_PATH}" . \
      "CLAUDE.md" \
      "package.sh" \
      "tests/*" \
+     "e2e/*" \
      "store/*" \
      "tools/*" \
      "types/*" \
@@ -39,9 +40,6 @@ SIZE="$(du -h "${OUT_PATH}" | cut -f1)"
 echo "Built:  ${ABS_PATH}"
 echo "Size:   ${SIZE}"
 echo
-echo "Install steps:"
-echo "  1. Help → About Thunderbird — confirm you're on ESR or Beta"
-echo "     (Release channel ignores the signature override pref)."
-echo "  2. about:config → xpinstall.signatures.required → false"
-echo "  3. Tools → Add-ons → gear icon → Install Add-on From File…"
-echo "     Pick: ${ABS_PATH}"
+echo "Install: Tools → Add-ons and Themes → ⚙ → Install Add-on From File…"
+echo "         and pick ${ABS_PATH}"
+echo "(Thunderbird doesn't require add-ons to be signed.)"

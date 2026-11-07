@@ -83,6 +83,7 @@ node --test tests/   # run the tests (Node 18+, no dependencies)
 npm install          # once: installs TypeScript (dev only)
 npm run typecheck    # check the code against Thunderbird's MV3 API types
 npm run check        # type check + minimum-version check + tests
+npm run test:e2e     # run the palette in a real Thunderbird (throwaway profile; opens a window)
 ```
 
 After loading the add-on temporarily, click **Reload** on the Debug Add-ons page after each change. [`CLAUDE.md`](CLAUDE.md) covers the architecture, how to add a command, and debugging tips.
@@ -90,7 +91,7 @@ After loading the add-on temporarily, click **Reload** on the Debug Add-ons page
 ## TODO
 
 - [x] add an icon
-- [ ] verify in Thunderbird: Filter: Clear, Write to…, Calendar/Tasks/Chat, Today pane, Undo, Print, View Source, and the extra shortcuts
-- [ ] check that Undo can undo moves made from the palette
-- [ ] check that Go to Tag works (the first try failed with "not viewable in any of the enabled folder modes")
+- [x] verify in Thunderbird: Filter: Clear, Write to…, Calendar/Tasks/Chat, Today pane, Undo, Print, View Source, Go to Tag and the extra shortcuts (`npm run test:e2e`, Thunderbird 158)
+- [x] Undo can undo moves made from the palette (Thunderbird 140+)
+- [ ] try it on Thunderbird 128 ESR (the e2e tests only cover the installed version)
 - [ ] publish on addons.thunderbird.net: take the screenshots listed in `store/LISTING.md`, choose the release version, submit

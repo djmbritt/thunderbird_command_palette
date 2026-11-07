@@ -15,7 +15,7 @@ A VSCode-style command palette extension for Thunderbird. Press `Ctrl+Shift+P` /
 
 ## Architecture
 
-The palette is an **`action` popup** (toolbar-button dropdown). The main shortcut is bound to the reserved `_execute_action` command in `manifest.json`, so Thunderbird opens the popup itself. `background.js` only handles the optional per-action shortcuts (see **Per-action shortcuts**). Action popups close natively on outside click, so there is no blur handler. The popup is fixed at 600×400 in `palette.css` so it doesn't resize as the result list changes.
+The palette is an **`action` popup** (toolbar-button dropdown). The main shortcut is bound to the reserved `_execute_action` command in `manifest.json`, so Thunderbird opens the popup itself. `background.js` only handles the optional per-action shortcuts (see **Per-action shortcuts**). Action popups close natively on outside click, so there is no blur handler. Thunderbird only opens an action popup if its button is on the current space's toolbar, and the button defaults to the Mail space only, so `action.allowed_spaces: []` adds it to every space; without that, Ctrl+Shift+P does nothing in Calendar, Tasks or Chat. The popup is fixed at 600×400 in `palette.css` so it doesn't resize as the result list changes.
 
 > History: earlier versions (≤0.3) opened `popup/palette.html` via `windows.create({type: "popup"})` from `background.js`, with parent-clamped positioning. That was replaced by the action popup.
 
@@ -64,6 +64,14 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 ### Rendering
 
 `render()` rebuilds the list only when the filtered set changes (`refilter`) or when deferred commands are merged. Selection changes (arrows, hover) go through `select(i)`, which repaints just the old and new rows via `paintRow`. Hover selection uses `mousemove`, not `mouseenter`, so rows scrolling under a stationary pointer during keyboard navigation don't steal the selection. The input is an ARIA combobox: `aria-activedescendant` points at the selected `opt-<i>` row. Optional row decoration: `iconColor` (e.g. tag colour).
+
+### API behaviour found by testing in Thunderbird
+
+Found with the e2e tests (Thunderbird 158) and Thunderbird's own source (`omni.ja`, `chrome/messenger/content/messenger/parent/ext-*.js`); the API docs don't say:
+- **`mailTabs.setQuickFilter`** clears every filter first. `false` sets the *inverted* filter ("unread: false" = only read messages); omit a key to leave it off. So pass only the filters to turn on, and `{}` to clear.
+- **`addressBooks.contacts.query`** returns nothing without a `searchString`. To list contacts, use `contacts.list(bookId)` per book.
+- **Tag folders** (`folders.getTagFolder`): `mailTabs.update({displayedFolderId})` is rejected unless the folder pane is in Tags mode ("not viewable in any of the enabled folder modes"); the retry with `folderMode: "tags"` works.
+- **Mail tabs** are `MailTab` objects with `tabId`, not `id`; `mailTabs.create` has no `windowId`.
 
 ### Query prefixes and message search
 
@@ -127,6 +135,9 @@ tests/harness.js               Loads the popup scripts (palette.html order) into
 tests/palette.test.js          Core behaviour: pickers, confirm flow, MRU, folders, unified, panes, junk.
 tests/features.test.js         Command groups: view, folder actions, tags, prefixes, navigation, compose, search, experiment, shortcuts.
 tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
+e2e/run.py                     End-to-end tests in a real Thunderbird (npm run test:e2e); see e2e/README.md.
+e2e/make-profile.sh            Throwaway test profile: Local Folders with test messages, add-on loaded from the working tree.
+e2e/marionette.py              Minimal Marionette (Gecko remote control) client used by run.py.
 types/api-since.json           GENERATED: Thunderbird version that added each namespace/function/event/property; used by check-since.
 types/messenger.d.ts           GENERATED messenger.* types (Thunderbird MV3 ESR schemas + experiments/schema.json). Don't edit; run `npm run types:update`.
 types/palette.d.ts             Our own shapes for JSDoc: Command, PickerSpec, ActivePicker, PaletteContext, FolderEntry, CommandSourceEntry, …
@@ -192,7 +203,7 @@ Implementation strategy:
 - **Main window**: only `Services.wm.getMostRecentWindow("mail:3pane")`. No fallback to `getMostRecentWindow(null)` — that can return a compose/message window lacking `goDoCommand`/`msgWindow`.
 - **runCommand** only accepts ids in `ALLOWED_COMMANDS` (undo, redo, compact, expand/collapse threads, print, view source). `dispatchCommand` looks for a controller in `tabmail.currentAboutMessage`, then `currentAbout3Pane`, then the outer window, because since TB 115 most mail commands live in the inner about:3pane / about:message documents. It throws distinct errors for "not supported by this version" and "not available right now" (e.g. nothing to undo), unlike `goDoCommand`, which fails silently.
 - **openSpace** uses `gSpacesToolbar.spaces` / `openSpace(tabmail, space)`. The public `spaces.open()` only opens spaces the extension created. Names are allowlisted.
-- **toggleTodayPane** calls `TodayPane.toggleVisibility()`.
+- **toggleTodayPane** fires the main window's `calendar_toggle_todaypane_command` (what View → Today Pane runs). Calling `TodayPane.toggleVisibility()` directly throws: it needs the command's event to flip the command's `checked` state.
 - **All-accounts get new mail** uses `win.goDoCommand("cmd_getMsgsForAuthAccounts")` — same command as the toolbar's "Get All New Messages".
 - **Per-account get new mail** maps the MailExtension `accountId` (= `nsIMsgAccount.key`) via `MailServices.accounts.accounts`, then calls `server.getNewMessages(rootFolder, msgWindow, null)`, falling back to `server.performBiff`. The popup does not list per-account entries for Local Folders (`type === "none"`).
 - **UI font size** returns the `mail.uifontsize` pref if > 0 (the user's explicit Thunderbird font-size choice), else the main window's computed root font size (the default, which follows the OS).
@@ -209,6 +220,7 @@ The popup feature-detects each function (`typeof messenger.palette?.fn === "func
 - **Don't use `goDoCommand` as an error-handling fallback**: it silently no-ops on unknown command ids instead of throwing. Use `dispatchCommand` and add new ids to `ALLOWED_COMMANDS` (and the schema description).
 - The internal names used here (`gSpacesToolbar`, `TodayPane`, `tabmail.currentAbout3Pane`, the `cmd_*` ids) are not public API. Verify them in Thunderbird after each ESR upgrade.
 - Don't catch errors silently — let them propagate so `executeAndClose` in the popup logs them. The popup closes either way.
+- **Throw `ExtensionError`** (from `ExtensionUtils.sys.mjs`), never plain `Error`: Thunderbird hides the message of any other error, and the popup only sees "An unexpected error occurred".
 
 ## Adding an action
 
@@ -243,7 +255,7 @@ The `run` function is called with no args. The popup closes after it resolves (o
 | `messagesDelete` | delete, Empty Trash |
 | `messagesTagsList` | `messages.tags.list` |
 | `compose`, `compose.send`, `compose.save` | compose details, Send Later, Save as Draft/Template |
-| `addressBooks` | Open Address Book, `addressBooks.contacts.query` |
+| `addressBooks` | Open Address Book, `addressBooks.list` + `addressBooks.contacts.list` (Write to…) |
 | `tabs` | tab titles for Switch to Tab… |
 | `storage` | MRU |
 | `notifications` | confirmations after move/copy/junk |
@@ -255,13 +267,15 @@ For actions that need Thunderbird internals, add a function to `experiments/sche
 `npm install` once, then `npm run typecheck` (or `npm run check` for types + tests). The shipped code stays plain JavaScript: TypeScript only reads it (`allowJs`, `checkJs`, `noEmit`), so there is still no build step.
 
 - **API types are generated, not hand-written.** `types/messenger.d.ts` comes from Thunderbird's official annotated MV3 schemas (`thunderbird/webext-annotated-schemas`, branch `esr-mv3`) plus our `experiments/schema.json`. `npm run types:update` regenerates it; the header records the schema commit and Thunderbird version. Don't use `@types/thunderbird-webext-browser`: it describes the MV2 API (e.g. `MailTab.id` instead of `tabId`, no `getUnifiedFolder`).
-- **Minimum version.** The schemas are for the current ESR, newer than our `strict_min_version` 128, so the type check alone accepts APIs that don't exist on 128. Every namespace, function and property carries `@since Thunderbird X` (shown on hover). Anything newer than 128 must be feature-detected (`typeof messenger.ns?.fn === "function"`), like `commands.openShortcutSettings` (140). `npm run check:since` (`tools/check-since.mjs`, part of `npm run check`, no install needed) enforces this: it finds `messenger.*` uses in `background.js`, `popup/` and `lib/`, looks them up in `types/api-since.json` (written by the generator), and fails on any newer than `strict_min_version` without a `typeof messenger.…` check in the same file. Mark a deliberate exception with a `since-ok` comment on the line. It can't see new *options* on old functions (the schemas only date namespaces, functions, events and properties), and it skips comments and `messenger.palette.*`.
+- **Minimum version.** The schemas are for the current ESR, newer than our `strict_min_version` 128, so the type check alone accepts APIs that don't exist on 128. Every namespace, function and property carries `@since Thunderbird X` (shown on hover). Anything newer than 128 must be feature-detected (`typeof messenger.ns?.fn === "function"`), like `commands.openShortcutSettings` (140). `npm run check:since` (`tools/check-since.mjs`, part of `npm run check`, no install needed) enforces this: it finds `messenger.*` uses in `background.js`, `popup/` and `lib/`, looks them up in `types/api-since.json` (written by the generator), and fails on any newer than `strict_min_version` without a `typeof messenger.…` check in the same file. Mark a deliberate exception with a `since-ok` comment on the line. It can't see new *options* on old functions (the schemas only date namespaces, functions, events and properties), and it skips comments and `messenger.palette.*`. Gate those on the running version with `thunderbirdMajorVersion()` (core), as `undoableOptions()` and Empty Trash's `messages.delete` argument do.
 - **Our own shapes** live in `types/palette.d.ts` and are used from JSDoc: `/** @type {Command[]} */`, `/** @returns {PickerSpec} */`. Command-building helpers declare `@returns {Command[]}` (and `.map(/** @returns {Command} */ (x) => ({…}))` for mapped tables) so literals like `requires: "mailTab"` are checked against the allowed values. Tables of API enum values get a `@type` using the API type, e.g. `messenger.mailTabs.MailTab["sortType"]`.
 - **`strict` is on**, so every function parameter needs a JSDoc type (`/** @param {string} text */`) and possibly-missing values must be handled. Many API fields are optional in the schema (`tab.id`, `tab.windowId`, `identity.email`), so guard them rather than assume. Commands gated with `requires` get their context through `requireMailTab()` (core) or `composeTabId()` (compose.js), which throw if it's missing, instead of `ctx.mailTab.…`. For DOM lookups that always succeed, cast: `/** @type {HTMLElement} */ (document.getElementById("…"))`.
 - **Not checked:** `experiments/implementation.js` (privileged code; Thunderbird internals have no types) and `tests/`.
 - The generator maps the schema loosely: optional parameters in the middle become overloads (`mailTabs.update(tabId?, props)`), reserved-word members work (`messages.delete`), and unknown shapes become `any`.
 
 ## Dev loop
+
+**End-to-end:** `npm run test:e2e` runs the palette in a real Thunderbird (throwaway profile, your own profile is never touched; a window opens while it runs). It checks the effect of each command that unit tests can't (quick filters, spaces, Today pane, undo, print, view source, Write to…, the per-action shortcuts). Run it after changing anything that calls Thunderbird. See `e2e/README.md`.
 
 Tests: `node --test tests/` (no dependencies). New commands are picked up automatically, because the harness reads `palette.html`. Stub any new API per test with `loadPalette({ api: (rec) => ({ ns: { fn: rec("name") } }) })`, which records calls into `p.calls`. Values recorded from inside the vm are JSON-copied before asserting, because cross-realm objects fail `deepStrictEqual`.
 
@@ -291,15 +305,15 @@ Steps recorded: the parallel setup calls, each command source (named `<file>#<n>
 - **The popup is anchored to the toolbar action button**, not centered like VSCode's palette. A centered, embedded overlay would need a privileged XUL overlay through an Experiment.
 - **Experiment-backed commands depend on Thunderbird internals** (see the caveats above) and are the most likely to break on a new ESR.
 - **Per-action shortcuts need the toolbar button.** `action.openPopup()` returns false if the button was removed from the toolbar.
-- **Write to… lists local address books only.** Remote (LDAP) books need a search string, and the picker loads contacts up front. Capped at 3000 addresses.
+- **Write to… lists local address books only.** It lists each book with `contacts.list`; `contacts.query` returns nothing without a search string, and remote (LDAP) books can only be searched. Capped at 3000 addresses.
 - **Search covers subject and sender only, first 50 per field.** Body/full-text search is slow on large mailboxes.
-- **Undo can't undo actions done via the API** if Thunderbird doesn't record them in its undo stack. Verify per action.
+- **Undo of palette moves, copies and deletes needs Thunderbird 140+.** They pass `isUserAction` (via `undoableOptions()`), which puts them on Thunderbird's undo stack. On 128–139 that option doesn't exist and MV3 rejects unknown keys, so it's left out there and those actions can't be undone. Other API actions (mark read, tag, archive) aren't on the undo stack.
 - **Font size is read when the popup opens.** Changing Thunderbird's font size takes effect the next time the palette opens, not while it's open.
 - **Tests use fakes.** `tests/*.test.js` check popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. The type check catches API signature mismatches against the schemas, but neither catches permission problems or anything in `experiments/` — verify those in Thunderbird. Keep the fakes in MV3 shape (e.g. mail tabs have `tabId`).
 
 ## Packaging
 
-Run `./package.sh`. It reads the version from `manifest.json` and writes `../command-palette-<version>.xpi` (outside the project so builds never nest), excluding `.git*`, `.claude/`, `CLAUDE.md`, `package.sh`, `tests/`, `store/`, `tools/`, `types/`, `package*.json`, `tsconfig*.json`, `node_modules/`, and stray `.xpi`/`build`/`dist` files. Add any new dev-only files to its `-x` list.
+Run `./package.sh`. It reads the version from `manifest.json` and writes `../command-palette-<version>.xpi` (outside the project so builds never nest), excluding `.git*`, `.claude/`, `CLAUDE.md`, `package.sh`, `tests/`, `e2e/`, `store/`, `tools/`, `types/`, `package*.json`, `tsconfig*.json`, `node_modules/`, and stray `.xpi`/`build`/`dist` files. Add any new dev-only files to its `-x` list.
 
 For ATN submission: code must not be minified or obfuscated. The extension id in `browser_specific_settings.gecko.id` (`command-palette@djmbritt.github.io`) is immutable once published. `store/LISTING.md` holds the listing text (summary, description) and the notes to reviewer, including why each experiment function is needed (ATN rejects experiments that duplicate a built-in API); `PRIVACY.md` is the privacy policy, pasted in full into the listing. Update both when features, permissions, stored data or the experiment change. Add-ons with experiments, or that read messages or contacts, always get a manual review.
 

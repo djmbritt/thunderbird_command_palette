@@ -26,6 +26,7 @@
   "action": {
     "default_title": "Command Palette",
     "default_popup": "popup/palette.html",
+    "allowed_spaces": [],
     "default_icon": {
       "16": "icons/icon.svg",
       "32": "icons/icon.svg",

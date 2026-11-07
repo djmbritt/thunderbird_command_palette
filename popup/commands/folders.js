@@ -3,6 +3,9 @@
 // Loaded after popup/palette.js (core); see the Command registry there.
 
 async function emptyTrashAllAccounts() {
+  // Permanent deletion: an options object since TB 140; before that a plain
+  // boolean (deprecated, but the only form 128–139 accept).
+  const permanently = (await thunderbirdMajorVersion()) >= 140 ? { deletePermanently: true } : true;
   const accounts = await messenger.accounts.list(false);
   for (const a of accounts) {
     const [trash] = await messenger.folders.query({ accountId: a.id, specialUse: ["trash"] });
@@ -11,7 +14,7 @@ async function emptyTrashAllAccounts() {
     while (true) {
       if (page.messages.length === 0) break;
       const ids = page.messages.map(m => m.id);
-      await messenger.messages.delete(ids, { deletePermanently: true });
+      await messenger.messages.delete(ids, permanently);
       if (!page.id) break;
       page = await messenger.messages.continueList(page.id);
     }

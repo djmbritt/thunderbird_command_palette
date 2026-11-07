@@ -26,7 +26,7 @@ async function markAsJunkAndMove() {
       return;
     }
     const ids = msgs.filter(m => m.folder?.id !== junkFolder.id).map(m => m.id);
-    if (ids.length > 0) await messenger.messages.move(ids, junkFolder.id);
+    if (ids.length > 0) await messenger.messages.move(ids, junkFolder.id, ...(await undoableOptions()));
   }));
   await notify(`Marked ${selectionText()} as junk`);
 }
@@ -147,7 +147,7 @@ registerCommands(() => [
       empty: "No matching folders.",
       placeholder: "Type a folder name…",
       items: destinationItems("move", async (ids, entry) => {
-        await messenger.messages.move(ids, entry.folder.id);
+        await messenger.messages.move(ids, entry.folder.id, ...(await undoableOptions()));
         await notify(`Moved ${selectionText()} to ${entry.displayName}`);
       }, { excludeSource: true })
     })
@@ -163,7 +163,7 @@ registerCommands(() => [
       empty: "No matching folders.",
       placeholder: "Type a folder name…",
       items: destinationItems("copy", async (ids, entry) => {
-        await messenger.messages.copy(ids, entry.folder.id);
+        await messenger.messages.copy(ids, entry.folder.id, ...(await undoableOptions()));
         await notify(`Copied ${selectionText()} to ${entry.displayName}`);
       }, { excludeSource: false })
     })
@@ -174,6 +174,6 @@ registerCommands(() => [
     icon: "✕",
     requires: "message",
     destructive: true,
-    run: () => messenger.messages.delete(ctx.selectedMessages.map(m => m.id))
+    run: async () => messenger.messages.delete(ctx.selectedMessages.map(m => m.id), ...(await undoableOptions()))
   }
 ]);

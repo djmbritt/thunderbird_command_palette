@@ -208,6 +208,32 @@ async function executeAndClose(cmd) {
   }
 }
 
+// ---- Thunderbird version gates ----------------------------------------------
+//
+// Options newer than strict_min_version (128) may only be passed where they
+// exist: MV3 rejects unknown keys, which would break the whole call on older
+// versions. (check-since sees whole functions only, not options.)
+
+/** @type {Promise<number> | null} */
+let thunderbirdMajor = null;
+
+/** Major version of the running Thunderbird, or 0 if unknown. */
+function thunderbirdMajorVersion() {
+  thunderbirdMajor ??= (typeof messenger.runtime?.getBrowserInfo === "function"
+    ? messenger.runtime.getBrowserInfo().then(info => parseInt(info.version, 10) || 0)
+    : Promise.resolve(0)
+  ).catch(() => 0);
+  return thunderbirdMajor;
+}
+
+// Trailing argument for messages.move/copy/delete that puts the action on
+// Thunderbird's undo stack (`isUserAction`, TB 140+); spread it into the call.
+// Without it, Undo can't undo moves and deletes made from the palette.
+/** @returns {Promise<[{ isUserAction: boolean }] | []>} */
+async function undoableOptions() {
+  return (await thunderbirdMajorVersion()) >= 140 ? [{ isUserAction: true }] : [];
+}
+
 /** @param {Parameters<typeof messenger.messages.update>[1]} props */
 function updateSelected(props) {
   return Promise.all(ctx.selectedMessages.map(m => messenger.messages.update(m.id, props)));
