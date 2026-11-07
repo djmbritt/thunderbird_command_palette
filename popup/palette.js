@@ -239,7 +239,8 @@ function selectionText() {
   return n === 1 ? "1 message" : `${n} messages`;
 }
 
-// Destination items for the Move/Copy pickers. Virtual (saved search),
+// Destination items for the Move/Copy pickers. `transfer(ids, entry)` gets the
+// folder entry (entry.folder.id, entry.displayName). Virtual (saved search),
 // unified and tag folders can't hold real messages, so they're excluded.
 // For moves, the folder all selected messages already live in is excluded too.
 function destinationItems(verb, transfer, { excludeSource }) {
@@ -254,7 +255,7 @@ function destinationItems(verb, transfer, { excludeSource }) {
       hint: e.breadcrumb,
       icon: e.icon,
       keywords: e.keywords,
-      run: () => transfer(ctx.selectedMessages.map(m => m.id), e.folder.id)
+      run: () => transfer(ctx.selectedMessages.map(m => m.id), e)
     }));
 }
 
@@ -746,10 +747,17 @@ async function takePendingCommand() {
   }
 }
 
-// "repeat-last" runs the most recent MRU command that's available here;
+// `pending` is a query prefix ("@", "?") to prefill, "repeat-last" to run the
+// most recent MRU command that's available here;
 // anything else is a command id to run (or open, for pickers). Destructive
 // commands are skipped for repeat: a shortcut must never fire them unseen.
 function runPendingCommand(pending) {
+  // A bare prefix ("@", "?") opens the palette in that mode.
+  if (PREFIX_MODES[pending]) {
+    queryEl.value = pending;
+    refilter();
+    return true;
+  }
   const available = filterCommands("", null); // MRU-ordered, gates applied
   let index = -1;
   if (pending === "repeat-last") {

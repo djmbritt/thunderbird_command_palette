@@ -43,6 +43,39 @@
         "description": "Return Thunderbird's UI font size in CSS pixels: the user's explicit setting (mail.uifontsize pref) if set, otherwise the main window's computed font size. Returns 0 if neither is available.",
         "async": true,
         "parameters": []
+      },
+      {
+        "name": "runCommand",
+        "type": "function",
+        "async": true,
+        "description": "Dispatch an allowlisted Thunderbird command (cmd_undo, cmd_redo, cmd_compactFolder, cmd_expandAllThreads, cmd_collapseAllThreads, cmd_print, cmd_viewPageSource) to the current mail tab. Throws if the command isn't allowed, isn't supported, or is currently disabled.",
+        "parameters": [
+          {
+            "name": "command",
+            "type": "string",
+            "description": "Command id from the allowlist."
+          }
+        ]
+      },
+      {
+        "name": "toggleTodayPane",
+        "type": "function",
+        "async": true,
+        "description": "Show or hide the calendar Today pane in the main window.",
+        "parameters": []
+      },
+      {
+        "name": "openSpace",
+        "type": "function",
+        "async": true,
+        "description": "Open a built-in Thunderbird space (mail, addressbook, calendar, tasks, chat, settings).",
+        "parameters": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "Built-in space name."
+          }
+        ]
       }
     ]
   }

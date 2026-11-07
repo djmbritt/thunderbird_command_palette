@@ -4,19 +4,21 @@
   "description": "VSCode-style command palette for Thunderbird. Press Ctrl+Shift+P to summon.",
   "version": "0.4.0",
   "author": "kwihi",
-
   "browser_specific_settings": {
     "gecko": {
       "id": "command-palette@kwihi.local",
       "strict_min_version": "128.0"
     }
   },
-
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
   "action": {
     "default_title": "Command Palette",
     "default_popup": "popup/palette.html"
   },
-
   "commands": {
     "_execute_action": {
       "suggested_key": {
@@ -24,9 +26,29 @@
         "mac": "Command+Shift+P"
       },
       "description": "Open the Command Palette"
+    },
+    "palette-repeat-last": {
+      "description": "Repeat the last palette command"
+    },
+    "palette-move-to": {
+      "description": "Move selected messages to folder…"
+    },
+    "palette-tag-with": {
+      "description": "Tag selected messages…"
+    },
+    "palette-switch-tab": {
+      "description": "Switch to tab…"
+    },
+    "palette-write-to": {
+      "description": "Write to contact…"
+    },
+    "palette-go-to-folder": {
+      "description": "Go to folder…"
+    },
+    "palette-search": {
+      "description": "Search messages…"
     }
   },
-
   "permissions": [
     "accountsRead",
     "messagesRead",
@@ -36,15 +58,25 @@
     "compose",
     "addressBooks",
     "tabs",
-    "storage"
+    "storage",
+    "accountsFolders",
+    "messagesTagsList",
+    "compose.send",
+    "compose.save",
+    "notifications"
   ],
-
   "experiment_apis": {
     "palette": {
       "schema": "experiments/schema.json",
       "parent": {
-        "scopes": ["addon_parent"],
-        "paths": [["palette"]],
+        "scopes": [
+          "addon_parent"
+        ],
+        "paths": [
+          [
+            "palette"
+          ]
+        ],
         "script": "experiments/implementation.js"
       }
     }

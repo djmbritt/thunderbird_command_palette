@@ -42,6 +42,51 @@ function buildExperimentCommands(accounts) {
   return out;
 }
 
+// Internal Thunderbird commands dispatched through the experiment's
+// allowlisted runCommand(). Errors such as "nothing to undo" propagate and
+// are logged by executeAndClose.
+const INTERNAL_COMMANDS = [
+  { command: "cmd_undo", id: "undo", label: "Undo", icon: "↶", keywords: "revert back" },
+  { command: "cmd_redo", id: "redo", label: "Redo", icon: "↷", keywords: "again" },
+  { command: "cmd_compactFolder", id: "compact-folders", label: "Compact Folders", icon: "⇲", keywords: "cleanup space disk", requires: "mailTab" },
+  { command: "cmd_expandAllThreads", id: "expand-threads", label: "Expand All Threads", icon: "⊞", keywords: "open threads conversations", requires: "mailTab" },
+  { command: "cmd_collapseAllThreads", id: "collapse-threads", label: "Collapse All Threads", icon: "⊟", keywords: "close threads conversations", requires: "mailTab" },
+  { command: "cmd_print", id: "print", label: "Print…", icon: "⎙", keywords: "print pdf", requires: "message" },
+  { command: "cmd_viewPageSource", id: "view-source", label: "View Message Source", icon: "</>", keywords: "source raw headers", requires: "message" }
+];
+
+function buildInternalCommands() {
+  if (typeof messenger.palette?.runCommand !== "function") return [];
+  return [
+    ...INTERNAL_COMMANDS.map(c => ({
+      id: c.id,
+      label: c.label,
+      icon: c.icon,
+      keywords: c.keywords,
+      requires: c.requires,
+      run: () => messenger.palette.runCommand(c.command)
+    })),
+    ...(typeof messenger.palette?.toggleTodayPane === "function" ? [{
+      id: "toggle-today-pane",
+      label: "Toggle Today Pane",
+      icon: "📅",
+      keywords: "today pane calendar agenda sidebar",
+      run: () => messenger.palette.toggleTodayPane()
+    }] : [])
+  ];
+}
+
+registerCommands(() => [
+  ...buildInternalCommands(),
+  ...(typeof messenger.commands?.openShortcutSettings === "function" ? [{
+    id: "configure-shortcuts",
+    label: "Configure Keyboard Shortcuts",
+    icon: "⌨",
+    keywords: "keys hotkeys bindings shortcut settings repeat",
+    run: () => messenger.commands.openShortcutSettings()
+  }] : [])
+]);
+
 registerCommands(({ accounts }) => [
   {
     id: "open-address-book",

@@ -26,6 +26,7 @@ async function markAsJunkAndMove() {
     const ids = msgs.filter(m => m.folder.id !== junkFolder.id).map(m => m.id);
     if (ids.length > 0) await messenger.messages.move(ids, junkFolder.id);
   }));
+  await notify(`Marked ${selectionText()} as junk`);
 }
 
 registerCommands(() => [
@@ -70,6 +71,22 @@ registerCommands(() => [
     icon: "→",
     requires: "message",
     run: () => messenger.compose.beginForward(firstSelectedId(), "forwardAsAttachment")
+  },
+  {
+    id: "open-in-tab",
+    label: "Open Message in New Tab",
+    icon: "⧉",
+    keywords: "open view display",
+    requires: "message",
+    run: () => messenger.messageDisplay.open({ messageId: firstSelectedId(), location: "tab" })
+  },
+  {
+    id: "open-in-window",
+    label: "Open Message in New Window",
+    icon: "⧉",
+    keywords: "open view display separate",
+    requires: "message",
+    run: () => messenger.messageDisplay.open({ messageId: firstSelectedId(), location: "window" })
   },
   {
     id: "mark-read",
@@ -127,7 +144,10 @@ registerCommands(() => [
       title: `Move ${selectionText()} to…`,
       empty: "No matching folders.",
       placeholder: "Type a folder name…",
-      items: destinationItems("move", (ids, f) => messenger.messages.move(ids, f), { excludeSource: true })
+      items: destinationItems("move", async (ids, entry) => {
+        await messenger.messages.move(ids, entry.folder.id);
+        await notify(`Moved ${selectionText()} to ${entry.displayName}`);
+      }, { excludeSource: true })
     })
   },
   {
@@ -140,7 +160,10 @@ registerCommands(() => [
       title: `Copy ${selectionText()} to…`,
       empty: "No matching folders.",
       placeholder: "Type a folder name…",
-      items: destinationItems("copy", (ids, f) => messenger.messages.copy(ids, f), { excludeSource: false })
+      items: destinationItems("copy", async (ids, entry) => {
+        await messenger.messages.copy(ids, entry.folder.id);
+        await notify(`Copied ${selectionText()} to ${entry.displayName}`);
+      }, { excludeSource: false })
     })
   },
   {

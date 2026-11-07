@@ -14,15 +14,20 @@ A VSCode-style command palette extension for Thunderbird. Press `Ctrl+Shift+P` /
 
 ## Architecture
 
-The palette is an **`action` popup** (toolbar-button dropdown). The shortcut is bound to the reserved `_execute_action` command in `manifest.json`, so Thunderbird opens the popup itself — there is no `commands.onCommand` listener. Action popups close natively on outside click, so there is no blur handler. The popup is fixed at 600×400 in `palette.css` so it doesn't resize as the result list changes.
+The palette is an **`action` popup** (toolbar-button dropdown). The main shortcut is bound to the reserved `_execute_action` command in `manifest.json`, so Thunderbird opens the popup itself. `background.js` only handles the optional per-action shortcuts (see **Per-action shortcuts**). Action popups close natively on outside click, so there is no blur handler. The popup is fixed at 600×400 in `palette.css` so it doesn't resize as the result list changes.
 
-> History: earlier versions (≤0.3) opened `popup/palette.html` via `windows.create({type: "popup"})` from `background.js`, with parent-clamped positioning. That was replaced by the action popup, and the background script was removed. Add a `background` key back to `manifest.json` if you need event listeners.
+> History: earlier versions (≤0.3) opened `popup/palette.html` via `windows.create({type: "popup"})` from `background.js`, with parent-clamped positioning. That was replaced by the action popup.
 
 Flow:
 1. User presses the shortcut → Thunderbird opens `popup/palette.html` as the action popup.
-2. On load, `palette.js` (in parallel) loads MRU history, lists accounts with folders, and captures the mail context.
-3. Static actions + experiment actions + "Go to: <folder>" entries are scored against the input via `lib/fuzzy.js`.
-4. Enter / click → run the action, then `window.close()`. Esc → close without running.
+2. `palette.html` loads `lib/*.js`, then the core `popup/palette.js`, then each `popup/commands/*.js` file (each calls `registerCommands`), then `popup/main.js`, which calls `init()`.
+3. `init()` (in parallel) loads MRU history, lists accounts with folders, captures context, applies the UI font size, and asks the background for a pending shortcut action. It then builds the command list from every registered source.
+4. Each keystroke re-scores commands via `lib/fuzzy.js` (or runs a message search for `?`).
+5. Enter / click → run the action, then `window.close()`. Esc → close without running.
+
+### Command registry
+
+Command groups live in `popup/commands/*.js` and call `registerCommands(source)` at load time. `source({ accounts })` returns, or resolves to, an array of commands. Sources run in registration order, which is the `<script>` order in `palette.html` and also the tie-break order for equal scores (compose → messages → tags → view → thunderbird → navigation → folders). A source that throws is logged and skipped. Shared helpers stay in the core: `ctx`, `updateSelected`, `selectionText`, `firstSelectedId`, `switchToFolder`, `destinationItems`, `specialIcon`, `folderEntries`, `notify`, `mailbox`.
 
 ### Mail context capture
 
@@ -32,8 +37,10 @@ Flow:
 - In a message tab / standalone message window: falls back to `messageDisplay.getDisplayedMessages`.
 - Both return paginated `MessageList`s; `collectMessages()` follows `messages.continueList` so large selections are handled fully.
 - `ctx.windowId` is recorded so `switchToFolder` navigates the originating window rather than an arbitrary one.
+- In a compose tab (`tab.type === "messageCompose"`): `ctx.composeTab` and `ctx.composeDetails` (from `compose.getComposeDetails`).
+- `ctx.mailTab` carries the tab's current state (`displayedFolder`, `sortType`, `sortOrder`, `groupType`, `layout`, pane visibility), which drives "current" hints and toggle labels.
 
-Actions with `requires: "message"` are hidden when no message is selected/displayed. Actions with `requires: "mailTab"` (e.g. the folder pane toggle) are hidden when the palette wasn't opened from a 3-pane mail tab. A `label` or `hint` may be a getter (`get label() {…}`) to reflect state captured in `ctx`, e.g. "Hide/Show Folder Pane", or the `current` hint on the active `Layout: …` command (the `LAYOUTS` table maps mailTabs `layout` values standard/wide/vertical to Thunderbird's menu names). Don't copy commands with object spread, which would freeze the getter.
+`requires` gates (see `isAvailable`): `"message"` hides a command when no message is selected/displayed, `"mailTab"` when the palette wasn't opened from a 3-pane mail tab, and `"compose"` outside a compose window. A `label` or `hint` may be a getter (`get label() {…}`) to reflect state captured in `ctx`, e.g. "Hide/Show Folder Pane", or the `current` hint on the active `Layout: …` command (the `LAYOUTS` table maps mailTabs `layout` values standard/wide/vertical to Thunderbird's menu names). Don't copy commands with object spread, which would freeze the getter.
 
 ### MRU ordering
 
@@ -43,7 +50,17 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 
 ### Rendering
 
-`render()` rebuilds the list only when the filtered set changes (`refilter`). Selection changes (arrows, hover) go through `select(i)`, which repaints just the old and new rows via `paintRow`. Hover selection uses `mousemove`, not `mouseenter`, so rows scrolling under a stationary pointer during keyboard navigation don't steal the selection. The input is an ARIA combobox: `aria-activedescendant` points at the selected `opt-<i>` row.
+`render()` rebuilds the list only when the filtered set changes (`refilter`), or when async data arrives (unread counts call `render()` again). Selection changes (arrows, hover) go through `select(i)`, which repaints just the old and new rows via `paintRow`. Hover selection uses `mousemove`, not `mouseenter`, so rows scrolling under a stationary pointer during keyboard navigation don't steal the selection. The input is an ARIA combobox: `aria-activedescendant` points at the selected `opt-<i>` row. Optional row decorations: `badge` (count pill on the far right, e.g. unread) and `iconColor` (e.g. tag colour).
+
+### Query prefixes and message search
+
+In the root list (not in pickers), a leading character switches mode (`parseQuery`):
+- `>`: commands only (no `kind`);
+- `@`: folders (`kind: "folder"`: Go to folder and unified folders);
+- `#`: tags (`kind: "tag"`: Go to Tag);
+- `?`: message search.
+
+Search is provided by `popup/commands/search.js` via `registerMessageSearch(fn)`. The core debounces it (250 ms), needs 2+ characters, and drops results whose query has moved on (`searchSeq`). `search.js` runs `messages.query` for subject and for author (first page only, then `abortList`), merges them newest-first, caps at 50, and opens the chosen message in a tab.
 
 ### Styling
 
@@ -51,37 +68,60 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 
 All colours are CSS variables on `:root`, with a `@media (prefers-color-scheme: dark)` override block — extension pages follow the Thunderbird/system theme. Add new colours to **both** blocks. Use `scrollbar-width`/`scrollbar-color` (Gecko), not `::-webkit-scrollbar`.
 
-### Picker mode (Move / Copy to Folder…)
+### Picker mode (Move / Copy, Tag with, Switch to Tab, Write to, Send from, Priority)
 
-A command with a `picker` function opens a sub-list instead of running. `picker()` returns `{ title, empty, items }`; `items` are ordinary commands (with `id`, `label`, `run`, …). While a picker is open:
+A command with a `picker` function opens a sub-list instead of running. `picker()` returns `{ title, items, placeholder?, empty? }` or a Promise of it. Async pickers show "Loading…" first, and a late result is dropped if the picker was closed or replaced (`pickerToken`). `items` are ordinary commands (with `id`, `label`, `run`, …). While a picker is open:
 - `#mode` shows the title banner (e.g. "Move 3 messages to…"), and filtering runs over `picker.items` instead of `commands`;
 - Esc, or Backspace on an empty query, returns to the root list (Esc in the root list closes the popup);
-- running an item records MRU for both the item (e.g. `move-to:<folderId>`) and the parent command, so recent destinations sort first.
+- running an item records MRU for both the item (e.g. `move-to:<folderId>`) and the parent command, so recent destinations sort first. Items with `noHistory: true` (tabs, search results) are never recorded; their ids don't survive a restart and would push useful entries out.
 
 Move/Copy destinations come from `folderEntries` (built once by `collectFolders`, shared with "Go to:"). Virtual, unified and tag folders are excluded since they can't hold real messages; Move also excludes the folder every selected message already lives in.
 
 ### Destructive actions
 
-Commands with `destructive: true` (Delete, Empty Trash):
+Commands with `destructive: true` (Delete, Empty Trash, Send Later):
 - require two activations in a row — the first Enter/click arms the row (red, "Press Enter again to confirm: …"); changing the selection or query disarms it;
-- are **never** recorded in MRU and get no MRU rank/boost, so a reflexive Ctrl+Shift+P → Enter can't fire them.
+- are **never** recorded in MRU and get no MRU rank/boost, so a reflexive Ctrl+Shift+P → Enter can't fire them;
+- are skipped by the "repeat last" shortcut.
 
 Mark any new irreversible action `destructive: true`.
 
 ## Files
 
 ```
-manifest.json              MV3 manifest. Binds the shortcut to _execute_action, declares permissions and the experiment API.
-popup/palette.html         Picker banner, search field (inline SVG icon), result list.
-popup/palette.css          Thunderbird-native theme: light default + prefers-color-scheme dark, all colours as :root variables; fixed popup size; .confirm style for armed destructive rows.
-popup/palette.js           Context capture, action registry, fuzzy filter, MRU, render loop.
-lib/fuzzy.js               Subsequence scorer (best of greedy passes from each start) with word-boundary/consecutive/prefix bonuses + highlight(). Loads in both the popup (window.Fuzzy) and Node (module.exports).
-tests/fuzzy.test.js        node:test suite for lib/fuzzy.js.
-tests/palette.test.js      Smoke tests: loads popup/palette.js in a vm with a fake DOM + fake messenger.* and drives it by key events.
-experiments/schema.json    Declares the `messenger.palette.*` API surface.
-experiments/implementation.js  Privileged code. Wraps Thunderbird internals (goDoCommand, MailServices) for actions MV3 can't reach.
-package.sh                 Builds ../command-palette-<version>.xpi.
+manifest.json                  MV3 manifest: shortcuts (_execute_action + per-action commands), permissions, experiment API.
+background.js                  Per-action shortcuts: opens the popup and hands it the requested action.
+popup/palette.html             Picker banner, search field, result list; <script> order defines load and tie-break order.
+popup/palette.css              Thunderbird-native theme (light + dark), rem-based sizing, .confirm and .row-badge styles.
+popup/palette.js               Core: ctx capture, MRU, helpers, command registry, matching + prefixes, search hook, render, pickers, pending shortcut actions.
+popup/main.js                  Calls init(); must be the last script.
+popup/commands/compose.js      Compose window: Send Later, Save as Draft/Template, Send from…, Set Priority…, receipt toggles.
+popup/commands/messages.js     Compose new, reply, forward, open in tab/window, mark read/unread/star/junk, archive, Move/Copy to…, delete.
+popup/commands/tags.js         Tag with…, Remove All Tags, Go to Tag: X.
+popup/commands/view.js         Quick filters, Sort by…, Reverse Sort, View: Threaded/Unthreaded/Grouped, panes, layouts.
+popup/commands/thunderbird.js  Experiment-backed: Undo/Redo, Compact, Expand/Collapse Threads, Print, View Source, Today Pane, Get Mail, Settings; Configure Keyboard Shortcuts; Address Book.
+popup/commands/navigation.js   Switch to Tab…, Write to… (contacts), Open Calendar/Tasks/Chat.
+popup/commands/folders.js      Mark Folder as Read, Favorites toggle, Empty Trash, Go to: Unified …, Go to: <folder> with unread badges.
+popup/commands/search.js       "?" message search provider.
+lib/fuzzy.js                   Subsequence scorer + highlight(). Loads in the popup (window.Fuzzy) and Node (module.exports).
+lib/vcard.js                   Minimal vCard reader (FN/N + EMAIL) for contacts. Popup (window.VCard) and Node.
+tests/harness.js               Loads the popup scripts (palette.html order) into a vm with a fake DOM + fake messenger.*; loadPalette() options documented at the top.
+tests/palette.test.js          Core behaviour: pickers, confirm flow, MRU, folders, unified, panes, junk.
+tests/features.test.js         Command groups: view, folder actions, tags, prefixes, navigation, compose, search, experiment, shortcuts.
+tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
+experiments/schema.json        Declares the messenger.palette.* API surface.
+experiments/implementation.js  Privileged code wrapping Thunderbird internals.
+package.sh                     Builds ../command-palette-<version>.xpi.
 ```
+
+### Per-action shortcuts
+
+Besides `_execute_action` (Ctrl+Shift+P), the manifest declares `palette-*` commands with **no default key**, so they never clash with Thunderbird shortcuts. Users assign them under Add-ons → gear → Manage Extension Shortcuts, or via "Configure Keyboard Shortcuts" (`commands.openShortcutSettings`, TB 137+). `background.js`:
+1. maps the command to an action (`SHORTCUT_ACTIONS`): a command id such as `move-to`, `tag-with`, `switch-tab` or `write-to`; `repeat-last`; or a prefix to prefill (`@`, `?`);
+2. stores it as `pending` and calls `action.openPopup()` synchronously in the listener, which is a user-input handler;
+3. answers the popup's `palette:takePending` message once. Requests expire after 5 s.
+
+The popup's `runPendingCommand` prefills a prefix, or finds the command among the currently available ones and runs it (or opens its picker). `repeat-last` picks the newest MRU entry that's available here and isn't destructive.
 
 ### Ranking
 
@@ -91,13 +131,19 @@ package.sh                 Builds ../command-palette-<version>.xpi.
 3. fuzzy score of `label + hint + keywords` (positions clipped to the label);
 4. **whole-word prefix hits**. If the query is a prefix of a single word, that word is scored as if it stood alone, at full weight for label words and `KEYWORD_WEIGHT` (0.9) for hint/keyword words. Without this, long labels and keyword-only matches lose to scattered letter matches because of the length penalty. For example, "delete" would rank "Go to: Unified Trash" (keyword "deleted") over "Delete (Move to Trash)".
 
-Plus the MRU tie-breaker. Equal scores keep insertion order: static → experiment → unified → folders.
+Plus the MRU tie-breaker. Equal scores keep registration order (see **Command registry**).
 
 ## Folder rendering
 
-Folders are added as `Go to: <name>` with the breadcrumb (`<account> · <parent path>`) in the dim hint. Account roots and unified folders are skipped (roots aren't navigable; unified folders are handled separately, see below). Fuzzy matching scores against label + hint + extra keywords (account name, full path, special-use tags), but highlights only render on the visible label so they stay visually aligned. Folder commands also set `nameStart` (where the name begins in the label); the name is scored on its own too, so typing `inbox` gets the prefix bonus on `Inbox` instead of competing with the `Go to: ` prefix.
+Folders are added as `Go to: <name>` (`kind: "folder"`) with the breadcrumb (`<account> · <parent path>`) in the dim hint. Account roots and unified folders are skipped (roots aren't navigable; unified folders are handled separately, see below). Fuzzy matching scores against label + hint + extra keywords (account name, full path, special-use tags), but highlights only render on the visible label so they stay visually aligned. Folder commands also set `nameStart` (where the name begins in the label); the name is scored on its own too, so typing `inbox` gets the prefix bonus on `Inbox` instead of competing with the `Go to: ` prefix.
 
 **Unified folders.** `buildUnifiedCommands()` adds `Go to: Unified <Inbox|Drafts|Sent|Archives|Templates|Junk|Trash>` (the `UNIFIED_TYPES` list) via `messenger.folders.getUnifiedFolder(type)` (TB 127+, needs only `accountsRead`). Types are fetched in parallel. A type that returns nothing or throws is skipped without hiding the others. Unified folders have no `accountId` and aren't in account trees. Their ids are only valid for the session, so command ids are the fixed `goto-unified-<type>` (for MRU). Each runs `switchToFolder(folder, { retryProps: { folderMode: "unified" } })`. If the plain `displayedFolderId` update is rejected, for example because the folder pane isn't in unified mode, it retries with `folderMode: "unified"`, which switches the folder pane to the unified view.
+
+**Unread badges.** After the first render, `loadUnreadCounts` calls `folders.getFolderInfo` for up to 500 folders (skipping saved searches) and re-renders. Zero shows no badge.
+
+**Current-folder actions.** "Mark Folder as Read" (`folders.markAsRead`) and "Add/Remove Folder from Favorites" (`folders.update({isFavorite})`) act on `ctx.mailTab.displayedFolder`, and are hidden when there isn't one. Both need `accountsFolders`.
+
+**Tag folders.** "Go to Tag: X" (`kind: "tag"`) resolves `folders.getTagFolder(key)` when run, then `switchToFolder(…, { retryProps: { folderMode: "tags" } })`.
 
 `switchToFolder` picks the originating normal window (falling back to the focused / first normal window), activates its mail tab, then calls `mailTabs.update({displayedFolderId})`. If that rejects, it opens the folder in a new mail tab. MV3 validates the update schema strictly — only `displayedFolderId` is passed.
 
@@ -109,53 +155,78 @@ Folders are added as `Go to: <name>` with the breadcrumb (`<account> · <parent 
 messenger.palette.getNewMail(accountId?)          // omit accountId for all accounts
 messenger.palette.openSettings()                  // opens about:preferences in a tab
 messenger.palette.openAccountSettings(accountId?)
-messenger.palette.getUIFontSize()               // px; 0 if unknown
+messenger.palette.getUIFontSize()                 // px; 0 if unknown
+messenger.palette.runCommand(command)             // allowlisted cmd_* (see ALLOWED_COMMANDS)
+messenger.palette.toggleTodayPane()
+messenger.palette.openSpace(name)                 // built-in space: calendar, tasks, chat, …
 ```
 
 Implementation strategy:
 - **Main window**: only `Services.wm.getMostRecentWindow("mail:3pane")`. No fallback to `getMostRecentWindow(null)` — that can return a compose/message window lacking `goDoCommand`/`msgWindow`.
+- **runCommand** only accepts ids in `ALLOWED_COMMANDS` (undo, redo, compact, expand/collapse threads, print, view source). `dispatchCommand` looks for a controller in `tabmail.currentAboutMessage`, then `currentAbout3Pane`, then the outer window, because since TB 115 most mail commands live in the inner about:3pane / about:message documents. It throws distinct errors for "not supported by this version" and "not available right now" (e.g. nothing to undo), unlike `goDoCommand`, which fails silently.
+- **openSpace** uses `gSpacesToolbar.spaces` / `openSpace(tabmail, space)`. The public `spaces.open()` only opens spaces the extension created. Names are allowlisted.
+- **toggleTodayPane** calls `TodayPane.toggleVisibility()`.
 - **All-accounts get new mail** uses `win.goDoCommand("cmd_getMsgsForAuthAccounts")` — same command as the toolbar's "Get All New Messages".
 - **Per-account get new mail** maps the MailExtension `accountId` (= `nsIMsgAccount.key`) via `MailServices.accounts.accounts`, then calls `server.getNewMessages(rootFolder, msgWindow, null)`, falling back to `server.performBiff`. The popup does not list per-account entries for Local Folders (`type === "none"`).
 - **UI font size** returns the `mail.uifontsize` pref if > 0 (the user's explicit Thunderbird font-size choice), else the main window's computed root font size (the default, which follows the OS).
 - **Open Settings** tries `win.openPreferencesTab()`, then `openContentTab("about:preferences")`, then throws.
 - **Open Account Settings** tries `win.MsgAccountManager(null, server)`, then `openAccountSettingsTab({server})`, then throws.
 
-The popup feature-detects `messenger.palette` (and `getUIFontSize` separately) and skips these commands if the experiment fails to load. See `HAS_EXPERIMENT` in `popup/palette.js`.
+The popup feature-detects each function (`typeof messenger.palette?.fn === "function"`) and omits commands whose function is missing, so an older or failed experiment just hides those commands.
 
 ### Caveats for the experiment
 
 - Experiments require either Mozilla signing or temporary loading; ATN review will scrutinize the privileged code closely.
 - `Services` is auto-available as a global in privileged scope — no import needed.
 - Internal function names drift across Thunderbird versions (95 → 115 → 128 → 140). If a fallback path fires, verify against the current ESR's `mail/base/content/mailWindow*.js`.
-- **Don't use `goDoCommand` as an error-handling fallback**: it silently no-ops on unknown command ids instead of throwing.
+- **Don't use `goDoCommand` as an error-handling fallback**: it silently no-ops on unknown command ids instead of throwing. Use `dispatchCommand` and add new ids to `ALLOWED_COMMANDS` (and the schema description).
+- The internal names used here (`gSpacesToolbar`, `TodayPane`, `tabmail.currentAbout3Pane`, the `cmd_*` ids) are not public API. Verify them in Thunderbird after each ESR upgrade.
 - Don't catch errors silently — let them propagate so `executeAndClose` in the popup logs them. The popup closes either way.
 
 ## Adding an action
 
-Append to `STATIC_ACTIONS` in `popup/palette.js`:
+Add it to the relevant `popup/commands/*.js` file's `registerCommands(...)` list, or create a new file, register it, and add a `<script>` tag before `main.js` in `palette.html`:
 
 ```js
 {
   id: "stable-id",                  // required in practice: MRU key (falls back to label, which breaks on rename)
-  label: "User-facing label",       // visible + fuzzy-matched + highlighted
+  label: "User-facing label",       // visible + fuzzy-matched + highlighted; may be a getter
   icon: "✎",                        // single-char glyph in the row
-  hint: "optional right-side hint", // visible (dim) + fuzzy-matched (no highlight)
+  iconColor: "#FF0000",             // optional icon colour (e.g. tag colour)
+  hint: "optional right-side hint", // visible (dim) + fuzzy-matched (no highlight); may be a getter
+  badge: "12",                      // optional count pill; may be a getter
   keywords: "hidden search terms",  // fuzzy-matched only, never displayed
-  requires: "message",              // optional gate: "message" = hidden when no message selected/displayed,
-                                    //   "mailTab" = hidden when not opened from a 3-pane mail tab
-  destructive: true,                // optional; two-step confirm + excluded from MRU
-  picker: () => ({ title, empty, items }), // optional; opens a sub-list instead of `run` (see Picker mode)
-  run: async () => { /* messenger.* calls; use ctx.selectedMessages */ }
+  kind: "folder",                   // optional: "folder" / "tag" for the @ / # prefixes
+  requires: "message",              // optional gate: "message" | "mailTab" | "compose"
+  destructive: true,                // optional; two-step confirm + excluded from MRU and repeat-last
+  noHistory: true,                  // optional; never recorded in MRU (ephemeral items)
+  picker: () => ({ title, items, placeholder, empty }), // optional, may be async; opens a sub-list instead of `run`
+  run: async () => { /* messenger.* calls; use ctx */ }
 }
 ```
 
-The `run` function is called with no args. The popup closes after it resolves (or throws — errors are logged). Check that any new API call is covered by `permissions` in `manifest.json` (e.g. `messages.delete` needs `messagesDelete`; `messages.move`/`copy` need `messagesMove`); request only what's used.
+The `run` function is called with no args. The popup closes after it resolves (or throws — errors are logged). Use `notify(message)` when the result isn't visible where the user is looking (e.g. messages moved away). Check that any new API call is covered by `permissions` in `manifest.json`; request only what's used. Current permissions and why:
 
-For actions that need Thunderbird internals, add a function to `experiments/schema.json` + `experiments/implementation.js` and gate the command on `HAS_EXPERIMENT` in `buildExperimentCommands`.
+| Permission | Used for |
+|---|---|
+| `accountsRead` | accounts, folders, identities, `displayedFolderId` |
+| `accountsFolders` | `folders.markAsRead`, `folders.update` (favorites) |
+| `messagesRead` | selection, `messages.query` search, `messageDisplay.open` |
+| `messagesUpdate` | read/star/junk/tags via `messages.update` |
+| `messagesMove` | move/copy/archive, junk move |
+| `messagesDelete` | delete, Empty Trash |
+| `messagesTagsList` | `messages.tags.list` |
+| `compose`, `compose.send`, `compose.save` | compose details, Send Later, Save as Draft/Template |
+| `addressBooks` | Open Address Book, `addressBooks.contacts.query` |
+| `tabs` | tab titles for Switch to Tab… |
+| `storage` | MRU |
+| `notifications` | confirmations after move/copy/junk |
+
+For actions that need Thunderbird internals, add a function to `experiments/schema.json` + `experiments/implementation.js` (or an id to `ALLOWED_COMMANDS` for a `cmd_*`), and feature-detect it in the popup.
 
 ## Dev loop
 
-Tests: `node --test tests/` (no dependencies). When adding a command, extend the fake `messenger` in `tests/palette.test.js` with any new API it calls. Values recorded from inside the vm are JSON-copied before asserting, because cross-realm objects fail `deepStrictEqual`.
+Tests: `node --test tests/` (no dependencies). New commands are picked up automatically, because the harness reads `palette.html`. Stub any new API per test with `loadPalette({ api: (rec) => ({ ns: { fn: rec("name") } }) })`, which records calls into `p.calls`. Values recorded from inside the vm are JSON-copied before asserting, because cross-realm objects fail `deepStrictEqual`.
 
 1. Open Thunderbird → **Tools → Add-ons and Themes** (`Ctrl+Shift+A`).
 2. Click the gear icon → **Debug Add-ons**.
@@ -167,9 +238,13 @@ Tests: `node --test tests/` (no dependencies). When adding a command, extend the
 
 - **The shortcut is per-Thunderbird-window**, not OS-global. Won't fire when Thunderbird is in the background.
 - **The popup is anchored to the toolbar action button**, not centered like VSCode's palette. A centered, embedded overlay would need a privileged XUL overlay through an Experiment.
-- **Experiment API surface is small.** `getNewMail`, `openSettings`, `openAccountSettings`, `getUIFontSize`. Most other toolbar-style actions can be added as `goDoCommand("cmd_*")` on the main window.
+- **Experiment-backed commands depend on Thunderbird internals** (see the caveats above) and are the most likely to break on a new ESR.
+- **Per-action shortcuts need the toolbar button.** `action.openPopup()` returns false if the button was removed from the toolbar.
+- **Write to… lists local address books only.** Remote (LDAP) books need a search string, and the picker loads contacts up front. Capped at 3000 addresses.
+- **Search covers subject and sender only, first 50 per field.** Body/full-text search is slow on large mailboxes.
+- **Undo can't undo actions done via the API** if Thunderbird doesn't record them in its undo stack. Verify per action.
 - **Font size is read when the popup opens.** Changing Thunderbird's font size takes effect the next time the palette opens, not while it's open.
-- **Tests use fakes.** `tests/palette.test.js` checks popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. It can't catch Thunderbird API signature or permission mismatches, or anything in `experiments/` — verify those in Thunderbird.
+- **Tests use fakes.** `tests/*.test.js` check popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. It can't catch Thunderbird API signature or permission mismatches, or anything in `experiments/` — verify those in Thunderbird.
 
 ## Packaging
 
@@ -180,7 +255,7 @@ For ATN submission: code must not be minified or obfuscated. The extension id in
 ## API reference quick links
 
 - [Supported manifest keys](https://developer.thunderbird.net/add-ons/mailextensions/supported-manifest-keys)
-- [`accounts`](https://webextension-api.thunderbird.net/en/mv3/accounts.html), [`folders`](https://webextension-api.thunderbird.net/en/mv3/folders.html), [`messages`](https://webextension-api.thunderbird.net/en/mv3/messages.html), [`mailTabs`](https://webextension-api.thunderbird.net/en/mv3/mailTabs.html), [`messageDisplay`](https://webextension-api.thunderbird.net/en/mv3/messageDisplay.html), [`compose`](https://webextension-api.thunderbird.net/en/mv3/compose.html), [`commands`](https://webextension-api.thunderbird.net/en/mv3/commands.html), [`windows`](https://webextension-api.thunderbird.net/en/latest/windows.html), [`addressBooks`](https://webextension-api.thunderbird.net/en/mv3/addressBooks.html)
+- [`accounts`](https://webextension-api.thunderbird.net/en/mv3/accounts.html), [`folders`](https://webextension-api.thunderbird.net/en/mv3/folders.html), [`messages`](https://webextension-api.thunderbird.net/en/mv3/messages.html), [`mailTabs`](https://webextension-api.thunderbird.net/en/mv3/mailTabs.html), [`messageDisplay`](https://webextension-api.thunderbird.net/en/mv3/messageDisplay.html), [`compose`](https://webextension-api.thunderbird.net/en/mv3/compose.html), [`commands`](https://webextension-api.thunderbird.net/en/mv3/commands.html), [`windows`](https://webextension-api.thunderbird.net/en/latest/windows.html), [`addressBooks`](https://webextension-api.thunderbird.net/en/mv3/addressBooks.html), [`addressBooks.contacts`](https://webextension-api.thunderbird.net/en/mv3/addressBooks.contacts.html), [`messages.tags`](https://webextension-api.thunderbird.net/en/mv3/messages.tags.html), [`identities`](https://webextension-api.thunderbird.net/en/mv3/identities.html), [`tabs`](https://webextension-api.thunderbird.net/en/mv3/tabs.html), [`action`](https://webextension-api.thunderbird.net/en/mv3/action.html), [`notifications`](https://webextension-api.thunderbird.net/en/mv3/notifications.html), [`spaces`](https://webextension-api.thunderbird.net/en/mv3/spaces.html)
 - Reference projects: [quickmove-extension](https://github.com/kewisch/quickmove-extension) (popup-based fuzzy folder picker, closest existing analog), [tbkeys](https://github.com/wshanks/tbkeys) (Experiment-API pattern for actions MV3 doesn't expose).
 
 ## Icons

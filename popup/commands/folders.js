@@ -28,8 +28,64 @@ function buildFolderCommands(entries) {
     hint: e.breadcrumb,
     icon: e.icon,
     keywords: e.keywords,
+    kind: "folder",
+    // Filled in by loadUnreadCounts() after the first render.
+    get badge() {
+      return e.unread > 0 ? String(e.unread) : undefined;
+    },
     run: () => switchToFolder(e.folder)
   }));
+}
+
+// Unread counts for the "Go to:" badges. Loaded after the palette is shown
+// (one getFolderInfo per folder) so a large folder tree doesn't delay opening;
+// the list re-renders once counts arrive. Capped to keep it cheap.
+const UNREAD_COUNT_LIMIT = 500;
+
+async function loadUnreadCounts(entries) {
+  if (typeof messenger.folders?.getFolderInfo !== "function") return;
+  await Promise.all(entries.slice(0, UNREAD_COUNT_LIMIT).map(async (e) => {
+    if (e.folder.isVirtual) return; // saved searches: counting re-runs the search
+    try {
+      e.unread = (await messenger.folders.getFolderInfo(e.folder.id)).unreadMessageCount || 0;
+    } catch {
+      // Folder may be gone or unavailable (offline IMAP); leave it blank.
+    }
+  }));
+}
+
+// Actions on the folder shown in the current mail tab.
+function displayedFolder() {
+  return ctx.mailTab?.displayedFolder || null;
+}
+
+function currentFolderCommands() {
+  return [
+    {
+      id: "folder-mark-read",
+      label: "Mark Folder as Read",
+      get hint() {
+        return displayedFolder()?.name;
+      },
+      icon: "●",
+      keywords: "mark all read folder catch up",
+      requires: "mailTab",
+      run: () => messenger.folders.markAsRead(displayedFolder().id)
+    },
+    {
+      id: "folder-toggle-favorite",
+      get label() {
+        return displayedFolder()?.isFavorite ? "Remove Folder from Favorites" : "Add Folder to Favorites";
+      },
+      get hint() {
+        return displayedFolder()?.name;
+      },
+      icon: "☆",
+      keywords: "favorite favourite star pin folder",
+      requires: "mailTab",
+      run: () => messenger.folders.update(displayedFolder().id, { isFavorite: !displayedFolder().isFavorite })
+    }
+  ];
 }
 
 // "Go to: Unified <folder>" commands. folders.getUnifiedFolder (TB 127+)
@@ -67,6 +123,7 @@ async function buildUnifiedCommands() {
       hint: "All accounts",
       icon: specialIcon([type]),
       keywords: `unified all accounts smart ${type} ${keywords}`,
+      kind: "folder",
       run: () => switchToFolder(folder, { retryProps: { folderMode: "unified" } })
     }));
 }
@@ -82,4 +139,8 @@ registerCommands(() => [
   }
 ]);
 registerCommands(() => buildUnifiedCommands());
-registerCommands(() => buildFolderCommands(folderEntries));
+registerCommands(() => currentFolderCommands().filter(() => displayedFolder()));
+registerCommands(() => {
+  loadUnreadCounts(folderEntries).then(() => render());
+  return buildFolderCommands(folderEntries);
+});

@@ -40,6 +40,56 @@ function findAccountByExtId(accountId) {
   return null;
 }
 
+// Internal commands the popup may dispatch via runCommand(). An allowlist, so
+// the extension page can't invoke arbitrary chrome commands (and so ATN
+// reviewers can see the full surface at a glance).
+const ALLOWED_COMMANDS = new Set([
+  "cmd_undo",
+  "cmd_redo",
+  "cmd_compactFolder",
+  "cmd_expandAllThreads",
+  "cmd_collapseAllThreads",
+  "cmd_print",
+  "cmd_viewPageSource"
+]);
+
+// Built-in spaces openSpace() may open (names from gSpacesToolbar.spaces).
+const ALLOWED_SPACES = new Set(["mail", "addressbook", "calendar", "tasks", "chat", "settings"]);
+
+// Windows that may host a controller for a mail command. Since TB 115 most
+// 3-pane commands are handled inside the about:3pane / about:message
+// documents of the current tab, not by the outer window.
+function commandTargets(win) {
+  const tabmail = win.document.getElementById("tabmail");
+  const targets = [];
+  const about3Pane = tabmail?.currentAbout3Pane;
+  const aboutMessage = tabmail?.currentAboutMessage;
+  if (aboutMessage) targets.push(aboutMessage);
+  if (about3Pane) targets.push(about3Pane);
+  targets.push(win);
+  return targets;
+}
+
+// Dispatch `command` to the first window whose controller supports it.
+// Unlike goDoCommand, this reports failure: unknown command (renamed in this
+// Thunderbird version) vs known-but-disabled (e.g. nothing to undo).
+function dispatchCommand(win, command) {
+  let disabled = false;
+  for (const target of commandTargets(win)) {
+    const controller = target.document.commandDispatcher?.getControllerForCommand(command);
+    if (!controller) continue;
+    if (!controller.isCommandEnabled(command)) {
+      disabled = true;
+      continue;
+    }
+    controller.doCommand(command);
+    return;
+  }
+  throw new Error(disabled
+    ? `${command} is not available right now`
+    : `${command} is not supported by this Thunderbird version`);
+}
+
 this.palette = class extends ExtensionCommon.ExtensionAPI {
   getAPI(context) {
     return {
@@ -87,6 +137,35 @@ this.palette = class extends ExtensionCommon.ExtensionAPI {
           if (!win) return 0;
           const px = parseFloat(win.getComputedStyle(win.document.documentElement).fontSize);
           return Number.isFinite(px) ? Math.round(px) : 0;
+        },
+
+        async runCommand(command) {
+          if (!ALLOWED_COMMANDS.has(command)) throw new Error(`Command not allowed: ${command}`);
+          const win = getMainWindow();
+          if (!win) throw new Error("No Thunderbird main window available");
+          dispatchCommand(win, command);
+        },
+
+        async toggleTodayPane() {
+          const win = getMainWindow();
+          if (!win) throw new Error("No Thunderbird main window available");
+          // TodayPane is the calendar Today pane controller in the main window.
+          if (typeof win.TodayPane?.toggleVisibility !== "function") {
+            throw new Error("Today pane is not available on this Thunderbird version");
+          }
+          win.TodayPane.toggleVisibility();
+        },
+
+        async openSpace(name) {
+          if (!ALLOWED_SPACES.has(name)) throw new Error(`Space not allowed: ${name}`);
+          const win = getMainWindow();
+          if (!win) throw new Error("No Thunderbird main window available");
+          const toolbar = win.gSpacesToolbar;
+          const space = toolbar?.spaces?.find(sp => sp.name === name);
+          if (!space || typeof toolbar.openSpace !== "function") {
+            throw new Error(`Space "${name}" cannot be opened on this Thunderbird version`);
+          }
+          toolbar.openSpace(win.document.getElementById("tabmail"), space);
         },
 
         async openSettings() {

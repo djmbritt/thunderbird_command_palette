@@ -10,18 +10,23 @@
     <div id="mode" aria-live="polite" hidden></div>
     <div id="search">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 0 1 4.38 8.82l3.65 3.65a.75.75 0 1 1-1.06 1.06l-3.65-3.65A5.5 5.5 0 1 1 6.5 1Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
-      <input id="query" type="text" role="combobox" aria-expanded="true" aria-controls="results" aria-autocomplete="list" aria-label="Command" autocomplete="off" spellcheck="false" placeholder="Type a command or folder…">
+      <input id="query" type="text" role="combobox" aria-expanded="true" aria-controls="results" aria-autocomplete="list" aria-label="Command" autocomplete="off" spellcheck="false" placeholder="Type a command — @ folders · # tags · ? messages">
     </div>
     <ul id="results" role="listbox" aria-label="Commands"></ul>
     <div id="empty" role="status" hidden>No matching commands.</div>
   </div>
   <script src="../lib/fuzzy.js"></script>
+  <script src="../lib/vcard.js"></script>
   <script src="palette.js"></script>
   <!-- Command groups. Order = tie-break order for equal match scores. -->
+  <script src="commands/compose.js"></script>
   <script src="commands/messages.js"></script>
+  <script src="commands/tags.js"></script>
   <script src="commands/view.js"></script>
   <script src="commands/thunderbird.js"></script>
+  <script src="commands/navigation.js"></script>
   <script src="commands/folders.js"></script>
+  <script src="commands/search.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
