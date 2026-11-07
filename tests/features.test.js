@@ -509,8 +509,9 @@ test("each open saves a startup timing run with named steps and counts", async (
   const p = await loadPalette({ selected: [] });
   await until(() => p.store.startupTimings?.[0]?.steps.firstPaint);
   const [run] = p.store.startupTimings;
-  for (const step of ["setup: accounts.list(true)", "setup: captureContext", "buildCommands (all sources)",
-    "source: folders.js#3", "first refilter + render", "firstPaint"]) {
+  for (const step of ["setup: accounts.list(true)", "setup: captureContext", "buildCommands (immediate)",
+    "source: folders.js#3", "first refilter + render", "firstPaint", "deferred sources (after paint)",
+    "source: folders.js#2", "source: tags.js#1"]) {
     assert.ok(run.steps[step], `missing step ${step}: ${Object.keys(run.steps).join(", ")}`);
   }
   assert.equal(run.counts.folders, 3);
@@ -522,14 +523,14 @@ test("unread counts are timed, and can be switched off for comparison", async ()
   const infoCalls = [];
   const api = { folders: { getFolderInfo: async (id) => { infoCalls.push(id); return { unreadMessageCount: 1 }; } } };
   const on = await loadPalette({ selected: [], api });
-  await until(() => on.store.startupTimings?.[0]?.steps["unread counts (background)"]);
+  await until(() => on.store.startupTimings?.[0]?.steps["unread counts (after paint)"]);
   assert.ok(infoCalls.length > 0);
-  assert.ok(on.store.startupTimings[0].steps["unread counts (background)"]);
+  assert.ok(on.store.startupTimings[0].steps["unread counts (after paint)"]);
   assert.equal(on.store.startupTimings[0].counts.unreadCountCalls, infoCalls.length);
 
   infoCalls.length = 0;
   const off = await loadPalette({ selected: [], api, initialStore: { debug: { skipUnreadCounts: true } } });
-  await until(() => off.store.startupTimings?.[0]?.steps["unread counts (background)"]);
+  await until(() => off.store.startupTimings?.[0]?.steps["unread counts (after paint)"]);
   assert.equal(infoCalls.length, 0);
   assert.equal(off.store.startupTimings[0].counts.unreadCountsSkipped, 1);
 });
@@ -545,4 +546,90 @@ test("Debug: Copy Startup Timings copies a readable summary", async () => {
   assert.match(copied, /^startup .*: first paint at \d+ ms/);
   assert.match(copied, /setup: accounts\.list\(true\)/);
   assert.match(copied, /counts: .*folders=3/);
+});
+
+// ---- Startup ordering: paint first, enrich later ------------------------------
+
+test("only the first rows are built before the first paint; the rest follow", async () => {
+  const many = Array.from({ length: 60 }, (_, i) => ({ id: `a1://F${i}`, name: `Folder ${i}`, path: `/F${i}`, subFolders: [] }));
+  const p = await loadPalette({ selected: [], extraFolders: many });
+  await until(() => p.store.startupTimings?.[0]?.steps.firstPaint);
+  const run = p.store.startupTimings[0];
+  assert.equal(run.counts.rowsInFirstChunk, 30);
+  assert.ok(run.counts.rowsTotal > 30);
+  await until(() => p.els.results.children.length > 30);
+});
+
+test("unified folders and tags arrive after first paint and keep their place in the list", async () => {
+  let release;
+  const gate = new Promise(r => { release = r; });
+  const p = await loadPalette({
+    selected: [],
+    unified: async (type) => { await gate; return type === "inbox" ? { id: "u-inbox", isUnified: true } : null; }
+  });
+  p.type("unified inbox");
+  assert.ok(!p.labels().includes("Go to: Unified Inbox"), "not there before the deferred source resolves");
+  release();
+  await until(() => p.labels().includes("Go to: Unified Inbox"));
+  assert.equal(p.labels()[0], "Go to: Unified Inbox", "merged into the current query's results");
+});
+
+test("an Enter pressed before deferred commands arrive runs the true top MRU entry", async () => {
+  let release;
+  const gate = new Promise(r => { release = r; });
+  const p = await loadPalette({
+    selected: [],
+    initialStore: { mru: ["goto-unified-inbox", "layout-wide"] },
+    unified: async (type) => { await gate; return type === "inbox" ? { id: "u-inbox", isUnified: true } : null; }
+  });
+  assert.equal(p.labels()[0], "Layout: Wide View", "deferred MRU entry not loaded yet");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [], "Enter waits for the deferred commands");
+  release();
+  await until(() => p.state.closed);
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { displayedFolderId: "u-inbox" }]]);
+});
+
+test("a row the user picked stays selected when deferred commands arrive", async () => {
+  let release;
+  const gate = new Promise(r => { release = r; });
+  const p = await loadPalette({
+    selected: [],
+    initialStore: { mru: ["goto-unified-inbox", "layout-wide", "layout-vertical"] },
+    unified: async (type) => { await gate; return type === "inbox" ? { id: "u-inbox", isUnified: true } : null; }
+  });
+  p.key("ArrowDown"); // explicit choice: Layout: Vertical View
+  assert.equal(p.selectedLabel(), "Layout: Vertical View");
+  release();
+  await until(() => p.labels()[0] === "Go to: Unified Inbox");
+  assert.equal(p.selectedLabel(), "Layout: Vertical View");
+});
+
+test("unread badges are filled in place without rebuilding the rows", async () => {
+  let release;
+  const gate = new Promise(r => { release = r; });
+  const p = await loadPalette({
+    selected: [],
+    api: { folders: { getFolderInfo: async (id) => { await gate; return { unreadMessageCount: id === "a1://INBOX" ? 5 : 0 }; } } }
+  });
+  p.type("go to: inbox");
+  const rowsBefore = [...p.els.results.children];
+  release();
+  await until(() => p.badges().includes("5"));
+  assert.deepEqual([...p.els.results.children], rowsBefore, "same row elements");
+});
+
+test("a queued Enter is cancelled by typing, and gives up waiting after a second", async () => {
+  const hang = new Promise(() => {}); // deferred source never resolves
+  const typed = await loadPalette({ selected: [], unified: async () => hang });
+  typed.key("Enter");
+  typed.type("layout wide");
+  await wait(1100);
+  assert.deepEqual(typed.calls, [], "typing cancelled the queued Enter");
+
+  const p = await loadPalette({ selected: [], initialStore: { mru: ["layout-wide"] }, unified: async () => hang });
+  p.key("Enter");
+  await until(() => p.state.closed, 2000);
+  assert.deepEqual(p.calls, [["mailTabs.update", 1, { layout: "wide" }]]);
 });

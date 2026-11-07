@@ -78,8 +78,22 @@ const Timing = {
     }
   },
 
+  // Page lifecycle from the Navigation Timing API (ms since document start).
+  recordNavigation() {
+    const nav = performance.getEntriesByType?.("navigation")?.[0];
+    if (!nav) return;
+    for (const [name, value] of [
+      ["page: DOM interactive", nav.domInteractive],
+      ["page: DOMContentLoaded done", nav.domContentLoadedEventEnd],
+      ["page: load event done", nav.loadEventEnd]
+    ]) {
+      if (value > 0) this.run.steps[name] = { start: Math.round(value), end: Math.round(value) };
+    }
+  },
+
   // Called once the first frame with results has been painted.
   async reportFirstPaint() {
+    this.recordNavigation();
     console.log(`[palette timing]\n${this.summary()}`);
     await this.save();
   },
@@ -91,14 +105,18 @@ const Timing = {
   }
 };
 
-// Resolves after the next frame has actually been painted: one
-// requestAnimationFrame runs before paint, a timeout after it runs after.
-function afterNextPaint() {
-  return new Promise((resolve) => {
-    if (typeof requestAnimationFrame !== "function") {
-      setTimeout(resolve, 0);
-      return;
-    }
-    requestAnimationFrame(() => setTimeout(resolve, 0));
+// When does Thunderbird actually show the popup? Record the first occurrence
+// of events that fire as the panel opens, and the first animation frame (the
+// refresh driver only produces frames once the document is being displayed).
+// Comparing these with "first refilter + render" separates time spent in
+// Thunderbird's panel from time spent in our code.
+Timing.set("visibleAtScriptStart", document.visibilityState === "visible" ? 1 : 0);
+for (const type of ["load", "pageshow", "focus", "resize", "visibilitychange"]) {
+  window.addEventListener?.(type, () => {
+    const name = `event: first ${type}${type === "visibilitychange" ? ` (${document.visibilityState})` : ""}`;
+    if (!Timing.run.steps[name]) Timing.mark(name);
   });
+}
+if (typeof requestAnimationFrame === "function") {
+  requestAnimationFrame(() => Timing.mark("event: first animation frame"));
 }

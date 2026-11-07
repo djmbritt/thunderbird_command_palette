@@ -451,14 +451,58 @@ function filterCommands(query, mode = null) {
 }
 
 let rowEls = [];
+let badgeEls = []; // badge <span> per row, parallel to rowEls
+let renderToken = 0;
 
-// Rebuild the whole list. Only called when the filtered set changes.
-function render() {
+// Rows built synchronously on the first render; the rest follow right after
+// the first paint. Comfortably more than fit in the popup at any font size.
+const FIRST_CHUNK_ROWS = 30;
+
+// Resolves after the next frame has been painted: requestAnimationFrame runs
+// just before a paint, and a timeout queued from it runs just after.
+function afterNextPaint() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame !== "function") {
+      setTimeout(resolve, 0);
+      return;
+    }
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
+
+// Rebuild the list. Only called when the filtered set changes.
+// `firstChunk`: build only the first FIRST_CHUNK_ROWS rows now and append the
+// rest after the next paint, so the popup can show something sooner. Used for
+// the initial render only; a newer render cancels a pending append.
+function render({ firstChunk = false } = {}) {
+  const token = ++renderToken;
   resultsEl.innerHTML = "";
   rowEls = [];
+  badgeEls = [];
   emptyEl.hidden = filtered.length > 0;
 
-  filtered.forEach((entry, i) => {
+  const initialRows = firstChunk ? Math.min(filtered.length, FIRST_CHUNK_ROWS) : filtered.length;
+  appendRows(initialRows);
+  updateActiveDescendant();
+  scrollSelectedIntoView();
+
+  if (initialRows < filtered.length) {
+    afterNextPaint().then(() => {
+      if (token === renderToken) appendRows(filtered.length);
+    });
+  }
+}
+
+// Make sure row `i` exists (selection can move past the first chunk before
+// the rest has been appended).
+function ensureRendered(i) {
+  if (i >= rowEls.length) appendRows(filtered.length);
+}
+
+// Append rows for filtered[rowEls.length .. upTo).
+function appendRows(upTo) {
+  for (let i = rowEls.length; i < upTo; i++) {
+    const entry = filtered[i];
     const li = document.createElement("li");
     li.id = `opt-${i}`;
     li.setAttribute("role", "option");
@@ -482,14 +526,14 @@ function render() {
       li.appendChild(hint);
     }
 
-    // Small pill on the far right, e.g. unread count. May be a getter that
-    // fills in later (counts load after the first render).
-    if (entry.cmd.badge) {
-      const badge = document.createElement("span");
-      badge.className = "row-badge";
-      badge.textContent = entry.cmd.badge;
-      li.appendChild(badge);
-    }
+    // Count pill on the far right (e.g. unread). Always present, empty when
+    // there's no badge, so late-arriving counts can be filled in place
+    // (refreshBadges) without rebuilding the list.
+    const badge = document.createElement("span");
+    badge.className = "row-badge";
+    badge.textContent = entry.cmd.badge || "";
+    li.appendChild(badge);
+    badgeEls.push(badge);
 
     // mousemove (not mouseenter) so rows scrolling under a stationary
     // pointer during keyboard navigation don't steal the selection.
@@ -504,10 +548,16 @@ function render() {
     rowEls.push(li);
     paintRow(i);
     resultsEl.appendChild(li);
-  });
+  }
+}
 
-  updateActiveDescendant();
-  scrollSelectedIntoView();
+// Update badge text on the rendered rows (badges are getters that may have
+// changed, e.g. after unread counts load).
+function refreshBadges() {
+  badgeEls.forEach((badge, i) => {
+    const text = filtered[i]?.cmd.badge || "";
+    if (badge.textContent !== text) badge.textContent = text;
+  });
 }
 
 // Refresh one row's selection/armed state and label.
@@ -528,7 +578,14 @@ function paintRow(i) {
   }
 }
 
+// True once the user moved the selection (arrows, hover, click). Until then,
+// late-arriving commands may re-sort the list and the top item is selected.
+let selectionTouched = false;
+
 function select(i, { scroll = true } = {}) {
+  ensureRendered(i);
+  selectionTouched = true;
+  cancelQueuedEnter();
   const prev = selectedIndex;
   selectedIndex = i;
   disarm();
@@ -678,7 +735,9 @@ function startSearch(text) {
 function refilter() {
   const { mode, text } = parseQuery(queryEl.value.trim());
   selectedIndex = 0;
+  selectionTouched = false;
   armedCmd = null;
+  cancelQueuedEnter(); // typing after Enter means the user changed their mind
   if (mode === "search") {
     startSearch(text);
   } else {
@@ -705,6 +764,13 @@ queryEl.addEventListener("keydown", (e) => {
     }
   } else if (e.key === "Enter") {
     e.preventDefault();
+    // An Enter pressed before the deferred commands (unified folders, tags)
+    // have arrived waits for them, so a reflexive Ctrl+Shift+P → Enter still
+    // runs the true top MRU entry even if that's a deferred command.
+    if (!deferredReady && !picker && !selectionTouched) {
+      queueEnter();
+      return;
+    }
     execSelected();
   } else if (e.key === "Escape") {
     e.preventDefault();
@@ -727,24 +793,75 @@ queryEl.addEventListener("keydown", (e) => {
 // skipped so one broken group can't empty the palette.
 const commandSources = [];
 
-function registerCommands(source) {
+//
+// `{ deferred: true }` marks a source that needs slow API calls (unified
+// folders, tags). Deferred sources run after the first paint; their commands
+// are merged in at their registration position when they arrive.
+function registerCommands(source, { deferred = false } = {}) {
   // Name the source after the registering script (for startup timings):
   // "folders.js#2" = the second source registered by commands/folders.js.
   const file = (document.currentScript?.src || "").split("/").pop() || "source";
   const n = commandSources.filter(s => s.file === file).length + 1;
-  commandSources.push({ source, file, name: `${file}#${n}` });
+  commandSources.push({ source, file, name: `${file}#${n}`, deferred, result: [] });
 }
 
-async function buildCommands(env) {
-  const lists = await Promise.all(commandSources.map(async ({ source, name }) => {
+// Run the immediate (deferred = false) or deferred sources, store each
+// result, and return the full command list in registration order.
+async function buildCommands(env, deferred) {
+  await Promise.all(commandSources.filter(s => s.deferred === deferred).map(async (entry) => {
     try {
-      return (await Timing.time(`source: ${name}`, () => source(env))) || [];
+      entry.result = (await Timing.time(`source: ${entry.name}`, () => entry.source(env))) || [];
     } catch (e) {
-      console.warn("[palette] command source failed", name, e);
-      return [];
+      console.warn("[palette] command source failed", entry.name, e);
+      entry.result = [];
     }
   }));
-  return lists.flat();
+  return commandSources.flatMap(s => s.result);
+}
+
+// Callbacks to run once the palette is visible (e.g. unread counts).
+const afterFirstPaintHooks = [];
+
+function onAfterFirstPaint(fn) {
+  afterFirstPaintHooks.push(fn);
+}
+
+let deferredReady = false;
+let enterQueued = false;
+let enterTimer = null;
+// Upper bound on how long a queued Enter waits for deferred commands, in
+// case a deferred API call hangs.
+const QUEUED_ENTER_MAX_WAIT_MS = 1000;
+
+function queueEnter() {
+  enterQueued = true;
+  clearTimeout(enterTimer);
+  enterTimer = setTimeout(runQueuedEnter, QUEUED_ENTER_MAX_WAIT_MS);
+}
+
+function cancelQueuedEnter() {
+  enterQueued = false;
+  clearTimeout(enterTimer);
+}
+
+function runQueuedEnter() {
+  if (!enterQueued) return;
+  cancelQueuedEnter();
+  execSelected();
+}
+
+// Merge deferred commands into the visible list without disturbing the user:
+// keep the query, keep an explicitly chosen row, otherwise select the new top.
+function applyDeferredCommands(all) {
+  commands = all;
+  deferredReady = true;
+  if (picker || parseQuery(queryEl.value.trim()).mode === "search") return;
+  const chosen = selectionTouched ? filtered[selectedIndex]?.cmd : null;
+  const { mode, text } = parseQuery(queryEl.value.trim());
+  filtered = filterCommands(text, mode);
+  const keep = chosen ? filtered.findIndex(e => e.cmd === chosen) : -1;
+  selectedIndex = keep === -1 ? 0 : keep;
+  render();
 }
 
 // ---- Shortcut-launched commands ---------------------------------------------
@@ -787,6 +904,12 @@ function runPendingCommand(pending) {
 }
 
 // Called from popup/main.js once every command file has registered.
+//
+// Order is tuned for time-to-visible (see "Measuring startup" in CLAUDE.md):
+//   1. parallel setup calls;
+//   2. immediate command sources → render the first rows → wait for paint;
+//   3. after paint: deferred sources (merged in place), then hooks such as
+//      unread counts (badges filled in place).
 async function init() {
   Timing.mark("init start");
   const [, accounts, , , pending] = await Timing.time("init: parallel setup", Promise.all([
@@ -799,13 +922,34 @@ async function init() {
   folderEntries = Timing.timeSync("collectFolders", () => collectFolders(accounts));
   Timing.set("accounts", accounts.length);
   Timing.set("folders", folderEntries.length);
-  commands = await Timing.time("buildCommands (all sources)", buildCommands({ accounts }));
-  Timing.set("commands", commands.length);
-  Timing.timeSync("first refilter + render", () => refilter());
-  Timing.set("rowsRendered", filtered.length);
+  const env = { accounts };
+
+  commands = await Timing.time("buildCommands (immediate)", buildCommands(env, false));
+  Timing.timeSync("first refilter + render", () => {
+    const { mode, text } = parseQuery(queryEl.value.trim());
+    filtered = filterCommands(text, mode);
+    selectedIndex = 0;
+    render({ firstChunk: true });
+  });
+  Timing.set("rowsTotal", filtered.length);
+  Timing.set("rowsInFirstChunk", rowEls.length);
   queryEl.focus();
-  if (pending) runPendingCommand(pending);
+
   await Timing.time("wait for first paint", afterNextPaint());
   Timing.mark("firstPaint");
-  await Timing.reportFirstPaint();
+  const reported = Timing.reportFirstPaint();
+
+  const all = await Timing.time("deferred sources (after paint)", buildCommands(env, true));
+  Timing.timeSync("merge deferred + re-render", () => applyDeferredCommands(all));
+  Timing.set("commands", commands.length);
+  for (const hook of afterFirstPaintHooks) hook();
+
+  if (pending) {
+    cancelQueuedEnter();
+    runPendingCommand(pending);
+  } else {
+    runQueuedEnter();
+  }
+  await reported;
+  await Timing.reportLate("deferred sources (after paint)");
 }

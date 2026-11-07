@@ -37,10 +37,12 @@ function buildFolderCommands(entries) {
   }));
 }
 
-// Unread counts for the "Go to:" badges. Loaded after the palette is shown
-// (one getFolderInfo per folder) so a large folder tree doesn't delay opening;
-// the list re-renders once counts arrive. Capped to keep it cheap.
+// Unread counts for the "Go to:" badges. Loaded after the palette is visible
+// (onAfterFirstPaint), a few calls at a time so they don't crowd out other
+// API calls, and filled into the rendered rows in place (refreshBadges) as
+// they arrive. Capped to keep it cheap.
 const UNREAD_COUNT_LIMIT = 500;
+const UNREAD_COUNT_CONCURRENCY = 4;
 
 async function loadUnreadCounts(entries) {
   if (typeof messenger.folders?.getFolderInfo !== "function") return;
@@ -49,17 +51,28 @@ async function loadUnreadCounts(entries) {
     return;
   }
   let slowest = 0;
-  await Promise.all(entries.slice(0, UNREAD_COUNT_LIMIT).map(async (e) => {
-    if (e.folder.isVirtual) return; // saved searches: counting re-runs the search
-    const start = performance.now();
-    try {
-      e.unread = (await messenger.folders.getFolderInfo(e.folder.id)).unreadMessageCount || 0;
-    } catch {
-      // Folder may be gone or unavailable (offline IMAP); leave it blank.
+  // Saved searches are skipped: counting them re-runs the search.
+  const queue = entries.slice(0, UNREAD_COUNT_LIMIT).filter(e => !e.folder.isVirtual);
+  let sinceRefresh = 0;
+  async function worker() {
+    while (queue.length > 0) {
+      const e = queue.shift();
+      const start = performance.now();
+      try {
+        e.unread = (await messenger.folders.getFolderInfo(e.folder.id)).unreadMessageCount || 0;
+      } catch {
+        // Folder may be gone or unavailable (offline IMAP); leave it blank.
+      }
+      Timing.count("unreadCountCalls");
+      slowest = Math.max(slowest, performance.now() - start);
+      if (e.unread && ++sinceRefresh >= 8) {
+        sinceRefresh = 0;
+        refreshBadges();
+      }
     }
-    Timing.count("unreadCountCalls");
-    slowest = Math.max(slowest, performance.now() - start);
-  }));
+  }
+  await Promise.all(Array.from({ length: UNREAD_COUNT_CONCURRENCY }, worker));
+  refreshBadges();
   Timing.set("unreadCountSlowestCallMs", Math.round(slowest));
 }
 
@@ -147,13 +160,11 @@ registerCommands(() => [
     run: emptyTrashAllAccounts
   }
 ]);
-registerCommands(() => buildUnifiedCommands());
+registerCommands(() => buildUnifiedCommands(), { deferred: true });
 registerCommands(() => currentFolderCommands().filter(() => displayedFolder()));
-registerCommands(() => {
-  Timing.time("unread counts (background)", loadUnreadCounts(folderEntries))
-    .then(() => {
-      render();
-      return Timing.reportLate("unread counts (background)");
-    });
-  return buildFolderCommands(folderEntries);
+registerCommands(() => buildFolderCommands(folderEntries));
+
+onAfterFirstPaint(() => {
+  Timing.time("unread counts (after paint)", loadUnreadCounts(folderEntries))
+    .then(() => Timing.reportLate("unread counts (after paint)"));
 });

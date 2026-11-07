@@ -89,4 +89,4 @@ registerCommands(async () => {
     },
     ...goToTagCommands(tags)
   ];
-});
+}, { deferred: true }); // messages.tags.list is a round trip; not needed for first paint

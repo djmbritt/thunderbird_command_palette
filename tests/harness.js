@@ -170,7 +170,7 @@ async function loadPalette({ initialStore = {}, api = {}, activeTab = { id: 1, w
   const selectedLabel = () => rowText(els.results.children.find(li => li.classList.contains("selected")));
 
   const hints = () => els.results.children.map(li => li.children.find(c => c.className === "row-hint")?.textContent);
-  const badges = () => els.results.children.map(li => li.children.find(c => c.className === "row-badge")?.textContent);
+  const badges = () => els.results.children.map(li => li.children.find(c => c.className === "row-badge")?.textContent || undefined);
   return { context, els, calls, store, state, documentElement, key, type, labels, hints, badges, selectedLabel };
 }
 

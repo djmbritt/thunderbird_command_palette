@@ -191,6 +191,12 @@ html, body {
   flex-shrink: 0;
 }
 
+/* Count pill, e.g. unread messages on "Go to:" rows. Every row has one;
+   it's hidden until it has text. */
+.row-badge:empty {
+  display: none;
+}
+
 /* Count pill, e.g. unread messages on "Go to:" rows. */
 .row-badge {
   flex-shrink: 0;
