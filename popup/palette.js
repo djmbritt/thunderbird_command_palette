@@ -17,7 +17,6 @@ const queryEl = document.getElementById("query");
 const resultsEl = document.getElementById("results");
 const emptyEl = document.getElementById("empty");
 const modeEl = document.getElementById("mode");
-const escActionEl = document.getElementById("esc-action"); // footer "Esc close/back"
 
 let commands = [];
 let filtered = [];
@@ -690,7 +689,6 @@ function openPicker(cmd) {
   picker = { ...cmd.picker(), parent: cmd };
   modeEl.textContent = picker.title;
   modeEl.hidden = false;
-  escActionEl.textContent = "back";
   queryEl.placeholder = "Type a folder name…";
   emptyEl.textContent = picker.empty || ROOT_EMPTY;
   queryEl.value = "";
@@ -700,7 +698,6 @@ function openPicker(cmd) {
 function closePicker() {
   picker = null;
   modeEl.hidden = true;
-  escActionEl.textContent = "close";
   queryEl.placeholder = ROOT_PLACEHOLDER;
   emptyEl.textContent = ROOT_EMPTY;
   queryEl.value = "";

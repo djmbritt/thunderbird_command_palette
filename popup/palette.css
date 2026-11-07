@@ -14,8 +14,6 @@
   --row-selected: rgba(0, 97, 224, 0.10);
   --danger: #c50042;
   --danger-bg: rgba(197, 0, 66, 0.10);
-  --kbd-bg: #f0f0f4;
-  --kbd-border: #cfcfd8;
   --scrollbar: #cfcfd8;
 }
 
@@ -31,8 +29,6 @@
     --row-selected: rgba(88, 166, 255, 0.16);
     --danger: #ff6b8b;
     --danger-bg: rgba(255, 107, 139, 0.14);
-    --kbd-bg: #2b2a33;
-    --kbd-border: #52525e;
     --scrollbar: #52525e;
   }
 }
@@ -206,30 +202,3 @@ html, body {
   color: var(--text-dim);
 }
 
-/* ---- Footer key hints ---- */
-
-#footer {
-  display: flex;
-  gap: 1.07rem;
-  padding: 0.4rem 0.8rem;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-dim);
-  font-size: 0.8rem;
-}
-
-kbd {
-  display: inline-block;
-  min-width: 1.33rem;
-  margin-right: 2px;
-  padding: 0 0.27rem;
-  border: 1px solid var(--kbd-border);
-  border-bottom-width: 2px;
-  border-radius: 3px;
-  background: var(--kbd-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.73rem;
-  line-height: 1.13rem;
-  text-align: center;
-}

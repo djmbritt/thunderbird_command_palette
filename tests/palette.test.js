@@ -115,8 +115,7 @@ async function loadPalette({ selected, palette, unified = UNIFIED, mailTabsUpdat
     query: fakeElement({ id: "query", placeholder: "Type a command or folder…" }),
     results: fakeElement({ id: "results" }),
     empty: fakeElement({ id: "empty", textContent: "No matching commands." }),
-    mode: fakeElement({ id: "mode", hidden: true }),
-    "esc-action": fakeElement({ id: "esc-action", textContent: "close" })
+    mode: fakeElement({ id: "mode", hidden: true })
   };
   const state = { closed: false };
   const documentElement = { style: {} };
@@ -209,9 +208,7 @@ test("Esc and Backspace-on-empty leave the picker without closing", async () => 
     p.type("move");
     p.key("Enter");
     assert.equal(p.els.mode.hidden, false);
-    assert.equal(p.els["esc-action"].textContent, "back");
     p.key(exitKey);
-    assert.equal(p.els["esc-action"].textContent, "close");
     assert.equal(p.els.mode.hidden, true, `${exitKey} should close the picker`);
     assert.equal(p.els.query.placeholder, "Type a command or folder…");
     assert.equal(p.state.closed, false);

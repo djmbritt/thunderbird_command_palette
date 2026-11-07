@@ -49,7 +49,7 @@ Successful command ids are stored in `storage.local` under `mru` (most recent fi
 
 **Font size follows Thunderbird.** Every text size, padding and the popup's width/height are in `rem`. On init, `applyUIFontSize()` sets `<html>` font-size from `messenger.palette.getUIFontSize()` (accepted range 8–40px), before the first render so the popup doesn't jump. Without the experiment the CSS fallback `html { font-size: 15px }` applies. Design base is 15px = 1rem, so a 12px design value is `0.8rem`. Keep borders, radii and accent bars in px. Popup size is `min(40rem, 800px)` × `min(26.67rem, 600px)`. Gecko caps popup size near 800×600.
 
-All colours are CSS variables on `:root`, with a `@media (prefers-color-scheme: dark)` override block — extension pages follow the Thunderbird/system theme. Add new colours to **both** blocks. Use `scrollbar-width`/`scrollbar-color` (Gecko), not `::-webkit-scrollbar`. The footer's Esc label (`#esc-action`) reads "close" in the root list and "back" in a picker.
+All colours are CSS variables on `:root`, with a `@media (prefers-color-scheme: dark)` override block — extension pages follow the Thunderbird/system theme. Add new colours to **both** blocks. Use `scrollbar-width`/`scrollbar-color` (Gecko), not `::-webkit-scrollbar`.
 
 ### Picker mode (Move / Copy to Folder…)
 
@@ -72,7 +72,7 @@ Mark any new irreversible action `destructive: true`.
 
 ```
 manifest.json              MV3 manifest. Binds the shortcut to _execute_action, declares permissions and the experiment API.
-popup/palette.html         Picker banner, search field (inline SVG icon), result list, key-hint footer.
+popup/palette.html         Picker banner, search field (inline SVG icon), result list.
 popup/palette.css          Thunderbird-native theme: light default + prefers-color-scheme dark, all colours as :root variables; fixed popup size; .confirm style for armed destructive rows.
 popup/palette.js           Context capture, action registry, fuzzy filter, MRU, render loop.
 lib/fuzzy.js               Subsequence scorer (best of greedy passes from each start) with word-boundary/consecutive/prefix bonuses + highlight(). Loads in both the popup (window.Fuzzy) and Node (module.exports).
