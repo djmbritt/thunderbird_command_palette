@@ -436,3 +436,33 @@ test("pane and layout commands are hidden outside a mail tab", async () => {
   p.type("");
   assert.ok(!p.labels().some(l => l.includes("Message Pane") || l.startsWith("Layout:")));
 });
+
+test("Mark as Junk flags every selected message as junk", async () => {
+  const p = await loadPalette();
+  p.type("junk");
+  assert.equal(p.labels()[0], "Mark as Junk");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [
+    ["update", 101, { junk: true }],
+    ["update", 102, { junk: true }]
+  ]);
+});
+
+test("Mark as Not Junk clears the junk flag", async () => {
+  const p = await loadPalette();
+  p.type("not junk");
+  assert.equal(p.labels()[0], "Mark as Not Junk");
+  p.key("Enter");
+  await settle();
+  assert.deepEqual(p.calls, [
+    ["update", 101, { junk: false }],
+    ["update", 102, { junk: false }]
+  ]);
+});
+
+test("junk commands need a selected message", async () => {
+  const p = await loadPalette({ selected: [] });
+  p.type("junk");
+  assert.ok(!p.labels().some(l => l.startsWith("Mark as")));
+});

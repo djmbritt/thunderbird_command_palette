@@ -234,6 +234,24 @@ const STATIC_ACTIONS = [
     run: () => updateSelected({ flagged: ctx.selectedMessages.some(m => !m.flagged) })
   },
   {
+    id: "mark-junk",
+    label: "Mark as Junk",
+    icon: "⚠",
+    keywords: "spam",
+    requires: "message",
+    // Sets the junk flag (trains the junk filter). Unlike the toolbar button,
+    // the API does not also move the message to the Junk folder.
+    run: () => updateSelected({ junk: true })
+  },
+  {
+    id: "mark-not-junk",
+    label: "Mark as Not Junk",
+    icon: "✓",
+    keywords: "spam ham legitimate",
+    requires: "message",
+    run: () => updateSelected({ junk: false })
+  },
+  {
     id: "archive",
     label: "Archive",
     icon: "▣",
