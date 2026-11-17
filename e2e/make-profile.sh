@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Create a throwaway Thunderbird profile for the end-to-end tests: one Local
 # Folders account with a few test messages, no first-run dialogs, and this
-# add-on loaded straight from the working tree (an extension proxy file).
+# add-on and its Extras companion loaded straight from the working tree
+# (extension proxy files).
 #
 #   e2e/make-profile.sh <profile-dir>
 #
@@ -14,9 +15,12 @@ id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["browser_sp
 rm -rf "$profile"
 mkdir -p "$profile/extensions" "$profile/Mail/Local Folders"
 
-# Extension proxy file: the file name is the add-on id, the content is the
+# Extension proxy files: the file name is the add-on id, the content is the
 # source directory. Lets the tests run the working tree without packaging.
 printf '%s\n' "$here" > "$profile/extensions/$id"
+# The Command Palette Extras companion (the experiment-backed commands).
+extras_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["browser_specific_settings"]["gecko"]["id"])' "$here/companion/manifest.json")
+printf '%s\n' "$here/companion" > "$profile/extensions/$extras_id"
 # A second add-on whose commands the palette should list and run.
 printf '%s\n' "$here/e2e/fixtures/test-addon" > "$profile/extensions/test-addon@e2e.example"
 

@@ -37,8 +37,8 @@
 
 /* Text sizes are in rem so the whole palette scales with the root font size.
    palette.js sets <html> font-size from Thunderbird's UI font size
-   (messenger.palette.getUIFontSize); 15px is the fallback when the
-   experiment is unavailable. Design base: 15px = 1rem. */
+   (extras.getUIFontSize, from the Command Palette Extras companion); 15px
+   is the fallback without it. Design base: 15px = 1rem. */
 html {
   font-size: 15px;
 }

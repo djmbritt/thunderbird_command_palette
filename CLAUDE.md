@@ -17,12 +17,14 @@ A VSCode-style command palette extension for Thunderbird. Press `Ctrl+Shift+P` /
 
 The palette is an **`action` popup** (toolbar-button dropdown). The main shortcut is bound to the reserved `_execute_action` command in `manifest.json`, so Thunderbird opens the popup itself. `background.js` only handles the optional per-action shortcuts (see **Per-action shortcuts**). Action popups close natively on outside click, so there is no blur handler. Thunderbird only opens an action popup if its button is on the current space's toolbar, and the button defaults to the Mail space only, so `action.allowed_spaces: []` adds it to every space; without that, Ctrl+Shift+P does nothing in Calendar, Tasks or Chat. The popup is fixed at 600×400 in `palette.css` so it doesn't resize as the result list changes.
 
+**Two add-ons.** The palette (repo root, listed on addons.thunderbird.net) has **no experiment**: ATN rejected 1.0.2 because it currently accepts no experiment APIs except unmodified copies of published drafts (`thunderbird/webext-experiments`). Commands that need Thunderbird internals live in a separate, self-hosted companion, **Command Palette Extras** (`companion/`), which holds the experiment and relays the palette's calls. See **Command Palette Extras**.
+
 > History: earlier versions (≤0.3) opened `popup/palette.html` via `windows.create({type: "popup"})` from `background.js`, with parent-clamped positioning. That was replaced by the action popup.
 
 Flow:
 1. User presses the shortcut → Thunderbird opens `popup/palette.html` as the action popup.
 2. `palette.html` loads `lib/*.js`, then the core `popup/palette.js`, then each `popup/commands/*.js` file (each calls `registerCommands`), then `popup/main.js`, which calls `init()`.
-3. `init()` (in parallel) loads MRU history, lists accounts with folders, captures context, applies the UI font size, and asks the background for a pending shortcut action. It builds the commands from the **immediate** sources, renders the first rows, and waits for the first paint. Only then does it run the **deferred** sources (unified folders, tags). See **Startup order**.
+3. `init()` starts connecting to the Extras companion (not awaited), then (in parallel) loads MRU history, lists accounts with folders, captures context, and asks the background for a pending shortcut action. It builds the commands from the **immediate** sources, renders the first rows, and waits for the first paint. Only then does it run the **deferred** sources (unified folders, tags, everything from the Extras companion). See **Startup order**.
 4. Each keystroke re-scores commands via `lib/fuzzy.js` (or runs a message search for `?`).
 5. Enter / click → run the action, then `window.close()`. Esc → close without running.
 
@@ -33,7 +35,7 @@ Command groups live in `popup/commands/*.js` and call `registerCommands(source, 
 ### Startup order
 
 Measured startup (see **Measuring startup**): first paint went from ~400 ms to ~140 ms typical. Most of the original time was spent *after* our code finished, waiting for Thunderbird to show the panel. The biggest single cause was the root font size changing after load (CSS default 15 px → the user's 14 px), which resized the rem-sized popup after Thunderbird had measured it (fixed by `early.js`, see **Styling**). Our own work is ~30–60 ms per open. `init()` is ordered for time-to-visible:
-1. Parallel setup calls (MRU, accounts, context, font size, pending shortcut).
+1. Parallel setup calls (MRU, accounts, context, pending shortcut). Connecting to the Extras companion and then applying its UI font size run alongside but aren't waited for: the companion's background page may need waking, and `early.js` has already applied the cached font size.
 2. Immediate sources → filter → `render({ firstChunk: true })` builds only the first `FIRST_CHUNK_ROWS` (30) rows. The rest are appended right after the paint, and a newer render cancels that append (`renderToken`). `select()` calls `ensureRendered()` so arrowing past the first chunk works.
 3. Wait for the first paint (`afterNextPaint`: rAF, then a timeout).
 4. Deferred sources → `applyDeferredCommands`, which keeps the query, keeps a row the user explicitly chose (`selectionTouched`), and otherwise re-selects the new top.
@@ -88,8 +90,8 @@ Search is provided by `popup/commands/search.js` via `registerMessageSearch(fn)`
 
 **Font size follows Thunderbird.** Every text size, padding and the popup's width/height are in `rem`. Because the popup's size depends on the root font size, it must be right at the *first* layout; a later change resizes the popup after Thunderbird has measured it.
 - `popup/early.js` runs in `<head>`, before the body is laid out. It applies the size cached in `localStorage.uiFontSize` from the previous open (synchronous, accepted range 8–40px).
-- `applyUIFontSize()` then asks `messenger.palette.getUIFontSize()` and only touches the page and the cache if the size has changed. Timings record `fontSizeCachedPx`, `fontSizeActualPx`, and `fontSizeChangedAfterLoad`.
-- Without the experiment, or on the very first open, the CSS fallback `html { font-size: 15px }` applies. Design base is 15px = 1rem, so a 12px design value is `0.8rem`. Keep borders, radii and accent bars in px. Popup size is `min(40rem, 800px)` × `min(26.67rem, 600px)`. Gecko caps popup size near 800×600.
+- `applyUIFontSize()` then waits for the Extras companion, asks `extras.getUIFontSize()` and only touches the page and the cache if the size has changed. Timings record `fontSizeCachedPx`, `fontSizeActualPx`, and `fontSizeChangedAfterLoad`.
+- Without the Extras companion, or on the very first open, the CSS fallback `html { font-size: 15px }` applies. Design base is 15px = 1rem, so a 12px design value is `0.8rem`. Keep borders, radii and accent bars in px. Popup size is `min(40rem, 800px)` × `min(26.67rem, 600px)`. Gecko caps popup size near 800×600.
 
 All colours are CSS variables on `:root`, with a `@media (prefers-color-scheme: dark)` override block — extension pages follow the Thunderbird/system theme. Add new colours to **both** blocks. Use `scrollbar-width`/`scrollbar-color` (Gecko), not `::-webkit-scrollbar`.
 
@@ -114,7 +116,7 @@ Mark any new irreversible action `destructive: true`.
 ## Files
 
 ```
-manifest.json                  MV3 manifest: shortcuts (_execute_action + per-action commands), permissions, experiment API.
+manifest.json                  MV3 manifest: shortcuts (_execute_action + per-action commands), permissions. No experiment (ATN).
 background.js                  Per-action shortcuts: opens the popup and hands it the requested action.
 popup/palette.html             Picker banner, search field, result list; <script> order defines load and tie-break order.
 popup/palette.css              Thunderbird-native theme (light + dark), rem-based sizing, .confirm style.
@@ -126,16 +128,17 @@ popup/commands/compose.js      Compose window: Send Later, Save as Draft/Templat
 popup/commands/messages.js     Compose new, reply, forward, open in tab/window, mark read/unread/star/junk, archive, Move/Copy to…, delete.
 popup/commands/tags.js         Tag with…, Remove All Tags, Go to Tag: X.
 popup/commands/view.js         Quick filters, Sort by…, Reverse Sort, View: Threaded/Unthreaded/Grouped, panes, layouts.
-popup/commands/thunderbird.js  Experiment-backed: Undo/Redo, Compact, Expand/Collapse Threads, Print, View Source, Today Pane, Get Mail, Settings; Configure Keyboard Shortcuts; Address Book.
+popup/commands/thunderbird.js  Extras-backed (deferred): Undo/Redo, Compact, Expand/Collapse Threads, Print, View Source, Today Pane, Get Mail, Settings, about: pages, or "Get Command Palette Extras…" without it; Configure Keyboard Shortcuts; Address Book.
 popup/commands/navigation.js   Switch to Tab…, Write to… (contacts), Open Calendar/Tasks/Chat.
 popup/commands/folders.js      Mark Folder as Read, Favorites toggle, Empty Trash, Go to: Unified …, Go to: <folder>.
-popup/commands/addons.js       Other add-ons' shortcut commands and buttons (deferred; experiment listAddonCommands / runAddonCommand).
+popup/commands/addons.js       Other add-ons' shortcut commands and buttons (deferred; extras.listAddonCommands / runAddonCommand).
 popup/commands/search.js       "?" message search provider.
 lib/fuzzy.js                   Subsequence scorer + segments() for highlighting (rendered as DOM nodes; never set innerHTML). Loads in the popup (window.Fuzzy) and Node (module.exports).
 lib/vcard.js                   Minimal vCard reader (FN/N + EMAIL) for contacts. Popup (window.VCard) and Node.
 tests/harness.js               Loads the popup scripts (palette.html order) into a vm with a fake DOM + fake messenger.*; loadPalette() options documented at the top.
 tests/palette.test.js          Core behaviour: pickers, confirm flow, MRU, folders, unified, panes, junk.
-tests/features.test.js         Command groups: view, folder actions, tags, prefixes, navigation, compose, search, experiment, shortcuts.
+tests/features.test.js         Command groups: view, folder actions, tags, prefixes, navigation, compose, search, Extras commands, shortcuts.
+tests/companion.test.js        The companion's relay (companion/background.js).
 tests/fuzzy.test.js, tests/vcard.test.js  Unit tests for lib/.
 e2e/run.py                     End-to-end tests in a real Thunderbird (npm run test:e2e); see e2e/README.md.
 e2e/make-profile.sh            Throwaway test profile: Local Folders with test messages, add-on loaded from the working tree.
@@ -143,15 +146,19 @@ e2e/fixtures/test-addon/       A second add-on (a shortcut command + a toolbar b
 e2e/marionette.py              Minimal Marionette (Gecko remote control) client used by run.py.
 e2e/screenshots.py             Takes the ATN listing screenshots (store/screenshots/) from a demo profile.
 types/api-since.json           GENERATED: Thunderbird version that added each namespace/function/event/property; used by check-since.
-types/messenger.d.ts           GENERATED messenger.* types (Thunderbird MV3 ESR schemas + experiments/schema.json). Don't edit; run `npm run types:update`.
+types/messenger.d.ts           GENERATED messenger.* types (Thunderbird MV3 ESR schemas + companion/experiments/schema.json). Don't edit; run `npm run types:update`.
 types/palette.d.ts             Our own shapes for JSDoc: Command, PickerSpec, ActivePicker, PaletteContext, FolderEntry, CommandSourceEntry, …
 types/globals.d.ts             Declares the lib/ globals (Fuzzy, VCard) for the type checker.
 tools/gen-types.mjs            Schema JSON → .d.ts (and api-since.json) generator; tools/update-types.sh downloads the schemas and runs it.
 tools/check-since.mjs          Fails on APIs newer than strict_min_version that aren't feature-detected (npm run check:since).
 tsconfig.json                  Type-checks the popup scripts (one shared global scope); tsconfig.background.json checks background.js.
 package.json                   Dev scripts only: test, typecheck, check:since, check, types:update.
-experiments/schema.json        Declares the messenger.palette.* API surface.
-experiments/implementation.js  Privileged code wrapping Thunderbird internals.
+companion/manifest.json        Command Palette Extras: MV3 manifest with the experiment, strict_max_version and update_url.
+companion/background.js        Relays the palette's runtime.sendMessage calls to messenger.palette.* (only from the palette, only listed functions).
+companion/experiments/schema.json        Declares the messenger.palette.* API surface.
+companion/experiments/implementation.js  Privileged code wrapping Thunderbird internals.
+companion/updates.json         Self-hosted update manifest (served from GitHub; not shipped in the .xpi).
+companion/icons                Symlink to ../icons (zip follows it).
 icons/icon.svg                 Icon source; tools/make-icons.sh renders icons/icon-<size>.png (what the manifest uses).
 package.sh                     Builds ../command-palette-<version>.xpi.
 PRIVACY.md                     Privacy policy (shipped; pasted into the ATN listing).
@@ -190,9 +197,22 @@ Folders are added as `Go to: <name>` (`kind: "folder"`) with the breadcrumb (`<a
 
 `switchToFolder` picks the originating normal window (falling back to the focused / first normal window), activates its mail tab, then calls `mailTabs.update(tabId, {displayedFolderId})`. If that rejects, it focuses the window and opens the folder with `mailTabs.create`, which has no `windowId` property. MV3 validates these schemas strictly and rejects unknown keys, so only `displayedFolderId` (plus `retryProps`) is passed. MV3 mail tabs carry their id as `tabId`; `id` is the MV2 name.
 
-## Experiment API (`messenger.palette.*`)
+## Command Palette Extras (companion add-on)
 
-`experiments/implementation.js` runs in the privileged `addon_parent` process with access to Thunderbird internals. Current surface:
+`companion/` is a second add-on (`command-palette-extras@djmbritt.github.io`), self-hosted: GitHub releases tagged `extras-v<version>`, updates via `update_url` → `companion/updates.json` on `main`. It exists only because ATN won't host the experiment. It has no UI and no permissions besides the experiment.
+
+**Protocol** (`companion/background.js`, `connectExtras()` in the core). The popup sends `runtime.sendMessage(EXTRAS_ID, …)`; the companion answers in `runtime.onMessageExternal`, and only for `sender.id === PALETTE_ID`:
+- `{type: "extras:hello"}` → `{version, functions}`: the names in its `FUNCTIONS` list that the experiment actually provides. If the companion isn't installed or is disabled, `sendMessage` rejects and `extras` stays `{}`.
+- `{type: "extras:call", name, args}` → the function's result. Errors reach the popup as rejections with their message, so `executeAndClose` logs them as before.
+- The companion drops the palette's own entries from `listAddonCommands` and refuses `runAddonCommand` for the palette.
+
+**In the popup**, `extras` (core) has one forwarding function per name from `hello`; `extrasReady` resolves once that's known. Every source that uses it is `{ deferred: true }` and starts with `await extrasReady`, then feature-detects (`typeof extras.fn === "function"`), so an older companion just hides newer commands. Never call `messenger.palette` from `popup/` (a test enforces this). Without the companion, `thunderbird.js` lists one *Get Command Palette Extras…* (`noHistory`, keywords for every missing command), which opens `EXTRAS_URL` (README section) with `windows.openDefaultBrowser`.
+
+**Versions**: the companion has its own version, `strict_max_version` (experiments are strictly compatible; Thunderbird disables them above it) and release cycle. Changing the protocol must stay compatible both ways: an old palette with a new companion and vice versa.
+
+## Experiment API (`messenger.palette.*`, in the companion)
+
+`companion/experiments/implementation.js` runs in the privileged `addon_parent` process with access to Thunderbird internals. Current surface:
 
 ```
 messenger.palette.getNewMail(accountId?)          // omit accountId for all accounts
@@ -223,11 +243,11 @@ Implementation strategy:
 - **Open Settings** tries `win.openPreferencesTab()`, then `openContentTab("about:preferences")`, then throws.
 - **Open Account Settings** tries `win.MsgAccountManager(null, server)`, then `openAccountSettingsTab({server})`, then throws.
 
-The popup feature-detects each function (`typeof messenger.palette?.fn === "function"`) and omits commands whose function is missing, so an older or failed experiment just hides those commands.
+The popup feature-detects each function (`typeof extras.fn === "function"`) and omits commands whose function is missing, so a missing, older or failed companion just hides those commands.
 
 ### Caveats for the experiment
 
-- Experiments require either Mozilla signing or temporary loading; ATN review will scrutinize the privileged code closely.
+- ATN currently doesn't accept add-ons with their own experiments, which is why it's in the companion. Thunderbird doesn't require signing, so the self-hosted .xpi installs from file.
 - `Services` is auto-available as a global in privileged scope — no import needed.
 - Internal function names drift across Thunderbird versions (95 → 115 → 128 → 140). If a fallback path fires, verify against the current ESR's `mail/base/content/mailWindow*.js`.
 - **Don't use `goDoCommand` as an error-handling fallback**: it silently no-ops on unknown command ids instead of throwing. Use `dispatchCommand` and add new ids to `ALLOWED_COMMANDS` (and the schema description).
@@ -273,17 +293,18 @@ The `run` function is called with no args. The popup closes after it resolves (o
 | `storage` | MRU |
 | `notifications` | confirmations after move/copy/junk |
 
-For actions that need Thunderbird internals, add a function to `experiments/schema.json` + `experiments/implementation.js` (or an id to `ALLOWED_COMMANDS` for a `cmd_*`), and feature-detect it in the popup.
+For actions that need Thunderbird internals, add a function to `companion/experiments/schema.json` + `companion/experiments/implementation.js` (or an id to `ALLOWED_COMMANDS` for a `cmd_*`), add its name to `FUNCTIONS` in `companion/background.js`, and use it from a deferred source via `extras` (feature-detected). Add it to the `get-extras` keywords and the companion's reviewer notes in `store/LISTING.md`.
 
 ## Type checking
 
 `npm install` once, then `npm run typecheck` (or `npm run check` for types + tests). The shipped code stays plain JavaScript: TypeScript only reads it (`allowJs`, `checkJs`, `noEmit`), so there is still no build step.
 
-- **API types are generated, not hand-written.** `types/messenger.d.ts` comes from Thunderbird's official annotated MV3 schemas (`thunderbird/webext-annotated-schemas`, branch `esr-mv3`) plus our `experiments/schema.json`. `npm run types:update` regenerates it; the header records the schema commit and Thunderbird version. Don't use `@types/thunderbird-webext-browser`: it describes the MV2 API (e.g. `MailTab.id` instead of `tabId`, no `getUnifiedFolder`).
-- **Minimum version.** The schemas are for the current ESR, newer than our `strict_min_version` 128, so the type check alone accepts APIs that don't exist on 128. Every namespace, function and property carries `@since Thunderbird X` (shown on hover). Anything newer than 128 must be feature-detected (`typeof messenger.ns?.fn === "function"`), like `commands.openShortcutSettings` (140). `npm run check:since` (`tools/check-since.mjs`, part of `npm run check`, no install needed) enforces this: it finds `messenger.*` uses in `background.js`, `popup/` and `lib/`, looks them up in `types/api-since.json` (written by the generator), and fails on any newer than `strict_min_version` without a `typeof messenger.…` check in the same file. Mark a deliberate exception with a `since-ok` comment on the line. It can't see new *options* on old functions (the schemas only date namespaces, functions, events and properties), and it skips comments and `messenger.palette.*`. Gate those on the running version with `thunderbirdMajorVersion()` (core), as `undoableOptions()` and Empty Trash's `messages.delete` argument do.
+- **API types are generated, not hand-written.** `types/messenger.d.ts` comes from Thunderbird's official annotated MV3 schemas (`thunderbird/webext-annotated-schemas`, branch `esr-mv3`) plus our `companion/experiments/schema.json`. `npm run types:update` regenerates it; the header records the schema commit and Thunderbird version. Don't use `@types/thunderbird-webext-browser`: it describes the MV2 API (e.g. `MailTab.id` instead of `tabId`, no `getUnifiedFolder`).
+- **Minimum version.** The schemas are for the current ESR, newer than our `strict_min_version` 128, so the type check alone accepts APIs that don't exist on 128. Every namespace, function and property carries `@since Thunderbird X` (shown on hover). Anything newer than 128 must be feature-detected (`typeof messenger.ns?.fn === "function"`), like `commands.openShortcutSettings` (140). `npm run check:since` (`tools/check-since.mjs`, part of `npm run check`, no install needed) enforces this: it finds `messenger.*` uses in `background.js`, `companion/background.js`, `popup/` and `lib/`, looks them up in `types/api-since.json` (written by the generator), and fails on any newer than `strict_min_version` without a `typeof messenger.…` check in the same file. Mark a deliberate exception with a `since-ok` comment on the line. It can't see new *options* on old functions (the schemas only date namespaces, functions, events and properties), and it skips comments and `messenger.palette.*`. Gate those on the running version with `thunderbirdMajorVersion()` (core), as `undoableOptions()` and Empty Trash's `messages.delete` argument do.
 - **Our own shapes** live in `types/palette.d.ts` and are used from JSDoc: `/** @type {Command[]} */`, `/** @returns {PickerSpec} */`. Command-building helpers declare `@returns {Command[]}` (and `.map(/** @returns {Command} */ (x) => ({…}))` for mapped tables) so literals like `requires: "mailTab"` are checked against the allowed values. Tables of API enum values get a `@type` using the API type, e.g. `messenger.mailTabs.MailTab["sortType"]`.
 - **`strict` is on**, so every function parameter needs a JSDoc type (`/** @param {string} text */`) and possibly-missing values must be handled. Many API fields are optional in the schema (`tab.id`, `tab.windowId`, `identity.email`), so guard them rather than assume. Commands gated with `requires` get their context through `requireMailTab()` (core) or `composeTabId()` (compose.js), which throw if it's missing, instead of `ctx.mailTab.…`. For DOM lookups that always succeed, cast: `/** @type {HTMLElement} */ (document.getElementById("…"))`.
-- **Not checked:** `experiments/implementation.js` (privileged code; Thunderbird internals have no types) and `tests/`.
+- `companion/background.js` has its own config (`tsconfig.companion.json`). `ExtrasApi` (`types/palette.d.ts`) is `typeof messenger.palette`, so `extras.fn(…)` calls are checked against the experiment schema.
+- **Not checked:** `companion/experiments/implementation.js` (privileged code; Thunderbird internals have no types) and `tests/`.
 - The generator maps the schema loosely: optional parameters in the middle become overloads (`mailTabs.update(tabId?, props)`), reserved-word members work (`messages.delete`), and unknown shapes become `any`.
 
 ## Dev loop
@@ -316,19 +337,23 @@ Steps recorded: the parallel setup calls, each command source (named `<file>#<n>
 
 - **The shortcut is per-Thunderbird-window**, not OS-global. Won't fire when Thunderbird is in the background.
 - **The popup is anchored to the toolbar action button**, not centered like VSCode's palette. A centered, embedded overlay would need a privileged XUL overlay through an Experiment.
-- **Experiment-backed commands depend on Thunderbird internals** (see the caveats above) and are the most likely to break on a new ESR.
+- **Extras commands need a second add-on** that users install from GitHub, and they **depend on Thunderbird internals** (see the caveats above) and are the most likely to break on a new ESR.
 - **Per-action shortcuts need the toolbar button.** `action.openPopup()` returns false if the button was removed from the toolbar.
 - **Write to… lists local address books only.** It lists each book with `contacts.list`; `contacts.query` returns nothing without a search string, and remote (LDAP) books can only be searched. Capped at 3000 addresses.
 - **Search covers subject and sender only, first 50 per field.** Body/full-text search is slow on large mailboxes.
 - **Undo of palette moves, copies and deletes needs Thunderbird 140+.** They pass `isUserAction` (via `undoableOptions()`), which puts them on Thunderbird's undo stack. On 128–139 that option doesn't exist and MV3 rejects unknown keys, so it's left out there and those actions can't be undone. Other API actions (mark read, tag, archive) aren't on the undo stack.
 - **Font size is read when the popup opens.** Changing Thunderbird's font size takes effect the next time the palette opens, not while it's open.
-- **Tests use fakes.** `tests/*.test.js` check popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. The type check catches API signature mismatches against the schemas, but neither catches permission problems or anything in `experiments/` — verify those in Thunderbird. Keep the fakes in MV3 shape (e.g. mail tabs have `tabId`).
+- **Tests use fakes.** `tests/*.test.js` check popup logic (filtering, picker mode, confirm flow, which `messenger.*` calls are made) against stubbed APIs. The type check catches API signature mismatches against the schemas, but neither catches permission problems or anything in `companion/experiments/` — verify those in Thunderbird (the e2e profile loads both add-ons; `without_extras_companion` disables the companion). Keep the fakes in MV3 shape (e.g. mail tabs have `tabId`).
 
 ## Packaging
 
-Run `./package.sh`. It reads the version from `manifest.json` and writes `../command-palette-<version>.xpi` (outside the project so builds never nest), excluding `.git*`, `.claude/`, `CLAUDE.md`, `package.sh`, `tests/`, `e2e/`, `store/`, `tools/`, `types/`, `package*.json`, `tsconfig*.json`, `node_modules/`, and stray `.xpi`/`build`/`dist` files. Add any new dev-only files to its `-x` list.
+Run `./package.sh`. It writes two files outside the project (so builds never nest):
+- `../command-palette-<version>.xpi` (version from `manifest.json`), excluding `.git*`, `.claude/`, `CLAUDE.md`, `package.sh`, `companion/`, `tests/`, `e2e/`, `store/`, `tools/`, `types/`, `package*.json`, `tsconfig*.json`, `node_modules/`, and stray `.xpi`/`build`/`dist` files. Add any new dev-only files to its `-x` list.
+- `../command-palette-extras-<version>.xpi` (version from `companion/manifest.json`): the contents of `companion/` plus the PNG icons, without `updates.json`.
 
-For ATN submission: code must not be minified or obfuscated. **`strict_max_version` is required** because the add-on has an experiment (ATN rejects the upload without it; `src/olympia/files/utils.py` in thunderbird/addons-server). Experiment add-ons are also strictly compatible: Thunderbird disables them above that version. So when a new Thunderbird release comes out, run `npm run test:e2e` on it and raise `strict_max_version` (currently `160.*`; use a `<major>.*` value ATN knows, like other published experiment add-ons do), then release. The extension id in `browser_specific_settings.gecko.id` (`command-palette@djmbritt.github.io`) is immutable once published. `store/LISTING.md` holds the listing text (summary, description) and the notes to reviewer, including why each experiment function is needed (ATN rejects experiments that duplicate a built-in API); `PRIVACY.md` is the privacy policy, pasted in full into the listing. Update both when features, permissions, stored data or the experiment change. Add-ons with experiments, or that read messages or contacts, always get a manual review.
+For ATN submission (the palette only): code must not be minified or obfuscated, and **no `experiment_apis`**. The palette has no `strict_max_version`; it isn't needed without an experiment.
+
+Releasing the companion: bump `companion/manifest.json`, build, attach the .xpi to a GitHub release tagged `extras-v<version>`, then add the version to `companion/updates.json` on `main` (installed copies poll it). The companion **has `strict_max_version`** (currently `160.*`): Thunderbird disables experiment add-ons above it. When a new Thunderbird release comes out, run `npm run test:e2e` on it, raise it in both `companion/manifest.json` and `companion/updates.json`, and release. The extension id in `browser_specific_settings.gecko.id` (`command-palette@djmbritt.github.io`) is immutable once published. `store/LISTING.md` holds the listing text (summary, description) and the notes to reviewer, including how the palette talks to the companion and why each companion function is needed; `PRIVACY.md` is the privacy policy, pasted in full into the listing. Update both, and `README.md`, when features, permissions, stored data or the companion change. Add-ons that read messages or contacts always get a manual review.
 
 ## API reference quick links
 

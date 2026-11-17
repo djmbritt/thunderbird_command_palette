@@ -1,4 +1,8 @@
-// Thunderbird-level commands: address book, and actions that need the privileged experiment (messenger.palette.*).
+// Thunderbird-level commands: address book, and actions that need Thunderbird
+// internals, which come from the Command Palette Extras companion add-on
+// (`extras`, see the core). Those sources are deferred: they wait for the
+// companion's answer. Without the companion, one "Get Command Palette
+// Extras…" entry stands in for them.
 //
 // Loaded after popup/palette.js (core); see the Command registry there.
 
@@ -6,16 +10,17 @@
  * @param {messenger.accounts.MailAccount[]} accounts
  * @returns {Command[]}
  */
-function buildExperimentCommands(accounts) {
-  if (!HAS_EXPERIMENT) return [];
+function buildExtrasCommands(accounts) {
+  const { getNewMail, openSettings, openAccountSettings, openAddonsManager } = extras;
   /** @type {Command[]} */
   const out = [];
+  if (typeof getNewMail !== "function") return out;
 
   out.push({
     id: "getnewmail:all",
     label: "Get New Mail (All Accounts)",
     icon: "⟳",
-    run: () => messenger.palette.getNewMail()
+    run: () => getNewMail()
   });
 
   for (const a of accounts) {
@@ -26,38 +31,42 @@ function buildExperimentCommands(accounts) {
       label: `Get New Mail: ${a.name}`,
       icon: "⟳",
       keywords: a.id,
-      run: () => messenger.palette.getNewMail(a.id)
+      run: () => getNewMail(a.id)
     });
   }
 
-  out.push({
-    id: "open-settings",
-    label: "Open Thunderbird Settings",
-    icon: "⚙",
-    run: () => messenger.palette.openSettings()
-  });
+  if (typeof openSettings === "function") {
+    out.push({
+      id: "open-settings",
+      label: "Open Thunderbird Settings",
+      icon: "⚙",
+      run: () => openSettings()
+    });
+  }
 
-  out.push({
-    id: "open-account-settings",
-    label: "Open Account Settings",
-    icon: "⚙",
-    run: () => messenger.palette.openAccountSettings()
-  });
+  if (typeof openAccountSettings === "function") {
+    out.push({
+      id: "open-account-settings",
+      label: "Open Account Settings",
+      icon: "⚙",
+      run: () => openAccountSettings()
+    });
+  }
 
-  if (typeof messenger.palette.openAddonsManager === "function") {
+  if (typeof openAddonsManager === "function") {
     out.push({
       id: "open-addons-manager",
       label: "Open Add-ons and Themes",
       icon: "🧩",
       keywords: "addons extensions plugins themes manager install",
-      run: () => messenger.palette.openAddonsManager()
+      run: () => openAddonsManager()
     });
   }
 
   return out;
 }
 
-// Internal Thunderbird commands dispatched through the experiment's
+// Internal Thunderbird commands dispatched through the companion's
 // allowlisted runCommand(). Errors such as "nothing to undo" propagate and
 // are logged by executeAndClose.
 /** @type {{ command: string, id: string, label: string, icon: string, keywords: string, requires?: Command["requires"] }[]} */
@@ -73,24 +82,40 @@ const INTERNAL_COMMANDS = [
 
 /** @returns {Command[]} */
 function buildInternalCommands() {
-  if (typeof messenger.palette?.runCommand !== "function") return [];
+  const { runCommand, toggleTodayPane } = extras;
   return [
-    ...INTERNAL_COMMANDS.map(c => ({
+    ...(typeof runCommand === "function" ? INTERNAL_COMMANDS.map(c => ({
       id: c.id,
       label: c.label,
       icon: c.icon,
       keywords: c.keywords,
       requires: c.requires,
-      run: () => messenger.palette.runCommand(c.command)
-    })),
-    ...(typeof messenger.palette?.toggleTodayPane === "function" ? [{
+      run: () => runCommand(c.command)
+    })) : []),
+    ...(typeof toggleTodayPane === "function" ? [{
       id: "toggle-today-pane",
       label: "Toggle Today Pane",
       icon: "📅",
       keywords: "today pane calendar agenda sidebar",
-      run: () => messenger.palette.toggleTodayPane()
+      run: () => toggleTodayPane()
     }] : [])
   ];
+}
+
+// Shown instead of the companion's commands when it isn't installed, so that
+// searching for one of them ("undo", "get mail", …) explains where it is.
+/** @returns {Command} */
+function getExtrasCommand() {
+  return {
+    id: "get-extras",
+    label: "Get Command Palette Extras…",
+    hint: "Undo, Get New Mail, Print, …",
+    icon: "🧩",
+    keywords: "more commands companion add-on install undo redo get new mail fetch print view source " +
+      "compact expand collapse threads today pane calendar tasks chat settings account about config addons",
+    noHistory: true,
+    run: () => messenger.windows.openDefaultBrowser(EXTRAS_URL)
+  };
 }
 
 // Diagnostic: copy the saved startup timings (see popup/timing.js) to the
@@ -142,7 +167,6 @@ registerCommands(() => [
     noHistory: true,
     run: copyStartupTimings
   }] : []),
-  ...buildInternalCommands(),
   ...(typeof messenger.commands?.openShortcutSettings === "function" ? [{
     id: "configure-shortcuts",
     label: "Configure Keyboard Shortcuts",
@@ -152,20 +176,30 @@ registerCommands(() => [
   }] : [])
 ]);
 
-registerCommands(({ accounts }) => [
+registerCommands(async () => {
+  await extrasReady;
+  return buildInternalCommands();
+}, { deferred: true }); // needs the Extras companion
+
+registerCommands(() => [
   {
     id: "open-address-book",
     label: "Open Address Book",
     icon: "☰",
     run: () => messenger.addressBooks.openUI()
-  },
-  ...buildExperimentCommands(accounts)
+  }
 ]);
+
+registerCommands(async ({ accounts }) => {
+  await extrasReady;
+  if (Object.keys(extras).length === 0) return [getExtrasCommand()];
+  return buildExtrasCommands(accounts);
+}, { deferred: true }); // needs the Extras companion
 
 // ---- about: pages -----------------------------------------------------------
 //
 // One "Open about:<name>" command per page Thunderbird lists in about:about
-// (from the experiment; extensions can't open about: pages themselves).
+// (from the Extras companion; extensions can't open about: pages themselves).
 // Common pages get a short description as the hint.
 /** @type {Record<string, string>} */
 const ABOUT_PAGE_HINTS = {
@@ -199,15 +233,17 @@ const ABOUT_PAGE_HINTS = {
 };
 
 registerCommands(async () => {
-  if (typeof messenger.palette?.listAboutPages !== "function") return [];
+  await extrasReady;
+  const { listAboutPages, openAboutPage } = extras;
+  if (typeof listAboutPages !== "function" || typeof openAboutPage !== "function") return [];
   /** @type {string[]} */
-  const names = await messenger.palette.listAboutPages();
+  const names = await listAboutPages();
   return names.map(name => ({
     id: `about-page:${name}`,
     label: `Open about:${name}`,
     hint: ABOUT_PAGE_HINTS[name],
     icon: "ⓘ",
     keywords: `about page internal advanced ${ABOUT_PAGE_HINTS[name] || ""}`,
-    run: () => messenger.palette.openAboutPage(name)
+    run: () => openAboutPage(name)
   }));
-}, { deferred: true }); // an experiment round trip; not needed for the first paint
+}, { deferred: true }); // needs the Extras companion; not needed for the first paint

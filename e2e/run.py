@@ -346,6 +346,28 @@ def other_addon_commands(tb):
 
 
 @test
+def without_extras_companion(tb):
+    """With the Extras companion disabled, its commands are gone and searching
+    for one offers "Get Command Palette Extras…" instead."""
+    return tb.js("""
+      const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
+      const extras = await AddonManager.getAddonByID("command-palette-extras@djmbritt.github.io");
+      await extras.disable();
+      try {
+        await openPalette();
+        const rows = (await palette("type", "undo")).rows.map(r => r.label);
+        paletteBrowser()?.closest("panel")?.hidePopup();
+        if (rows.includes("Undo")) throw new Error("Undo listed without the companion");
+        if (rows[0] !== "Get Command Palette Extras…") throw new Error("top row: " + rows[0]);
+        return rows.slice(0, 3);
+      } finally {
+        await extras.enable();
+        await until(() => ExtensionParent.GlobalManager.getExtension(extras.id), "the companion to restart");
+      }
+    """)
+
+
+@test
 def open_addons_manager(tb):
     tb.js("""
       await run("add-ons and themes", "Open Add-ons and Themes");

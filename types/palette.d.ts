@@ -99,7 +99,7 @@ interface CommandSourceEntry {
 /** Provider for "?" message search (see registerMessageSearch). */
 type MessageSearch = (text: string) => Promise<Command[]>;
 
-/** Another add-on's command, from messenger.palette.listAddonCommands(). */
+/** Another add-on's command, from extras.listAddonCommands(). */
 interface AddonCommand {
   extensionId: string;
   extensionName: string;
@@ -111,3 +111,10 @@ interface AddonCommand {
   shortcut: string;
   kind: "command" | "action" | "composeAction" | "messageDisplayAction";
 }
+
+/**
+ * The Command Palette Extras companion's functions (its experiment,
+ * messenger.palette.*, relayed by companion/background.js). The popup calls
+ * them through `extras` in the core, never messenger.palette directly.
+ */
+type ExtrasApi = typeof messenger.palette;

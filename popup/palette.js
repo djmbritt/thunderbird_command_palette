@@ -81,9 +81,47 @@ function mruBoost(id) {
   return Math.max(0, 0.5 * (1 - rank / 20));
 }
 
-// True when manifest's experiment_apis.palette successfully loaded.
-// If false, palette.* calls would throw — feature-detect and gate commands.
-const HAS_EXPERIMENT = typeof messenger.palette?.getNewMail === "function";
+// ---- Command Palette Extras (companion add-on) ------------------------------
+//
+// Commands that need Thunderbird internals (Undo, Get New Mail, Print, spaces,
+// about: pages, other add-ons' commands, …) come from a separate, self-hosted
+// add-on with an experiment API: addons.thunderbird.net doesn't accept this
+// add-on with an experiment of its own. See companion/background.js.
+//
+// `extras` holds one function per experiment function the companion offers,
+// each forwarding to it by runtime.sendMessage. It's empty until
+// connectExtras() resolves (`extrasReady`), and stays empty when the companion
+// isn't installed, so feature-detect with `typeof extras.fn === "function"`
+// after `await extrasReady`. Sources that use it are deferred, so a slow
+// companion (its background page may need waking) never delays the first
+// paint.
+const EXTRAS_ID = "command-palette-extras@djmbritt.github.io";
+const EXTRAS_URL = "https://github.com/djmbritt/thunderbird_command_palette#command-palette-extras";
+
+/** @type {Partial<ExtrasApi>} */
+let extras = {};
+
+async function connectExtras() {
+  /** @type {{ functions?: unknown } | undefined} */
+  let reply;
+  try {
+    reply = await messenger.runtime.sendMessage(EXTRAS_ID, { type: "extras:hello" });
+  } catch {
+    return; // not installed or disabled
+  }
+  if (!Array.isArray(reply?.functions)) return;
+  /** @type {Record<string, (...args: unknown[]) => Promise<any>>} */
+  const api = {};
+  for (const name of reply.functions) {
+    if (typeof name !== "string") continue;
+    api[name] = (...args) => messenger.runtime.sendMessage(EXTRAS_ID, { type: "extras:call", name, args });
+  }
+  extras = /** @type {Partial<ExtrasApi>} */ (api);
+  Timing.set("extrasFunctions", Object.keys(api).length);
+}
+
+/** @type {Promise<void>} */
+let extrasReady = Promise.resolve();
 
 // Flatten a paginated MessageList (or a plain array, which some APIs/versions
 // return) into a single array of MessageHeaders.
@@ -108,12 +146,13 @@ async function collectMessages(list) {
 // palette.css are rem, so setting the root font size scales everything.
 // popup/early.js already applied the size cached from the last open; this
 // only touches the page (and the cache) if the size has changed, so the
-// popup normally keeps the size it was first laid out with. Without the
-// experiment, the CSS fallback (15px) applies.
+// popup normally keeps the size it was first laid out with. Needs the
+// Extras companion; without it, the CSS fallback (15px) applies.
 async function applyUIFontSize() {
-  if (typeof messenger.palette?.getUIFontSize !== "function") return;
+  await extrasReady;
+  if (typeof extras.getUIFontSize !== "function") return;
   try {
-    const px = await messenger.palette.getUIFontSize();
+    const px = await extras.getUIFontSize();
     const cached = Number(localStorage.getItem(UI_FONT_SIZE_CACHE_KEY)) || 0;
     Timing.set("fontSizeCachedPx", cached);
     Timing.set("fontSizeActualPx", px);
@@ -1039,11 +1078,16 @@ function runPendingCommand(pending) {
 //   3. after paint: deferred sources, merged in place.
 async function init() {
   Timing.mark("init start");
-  const [, accounts, , , pending] = await Timing.time("init: parallel setup", Promise.all([
+  // Not awaited here: only deferred sources and the font size need it.
+  extrasReady = Timing.time("setup: connect Extras", connectExtras());
+  // The font size waits for the companion, so it isn't part of the setup the
+  // first render waits for; popup/early.js has already applied the size
+  // cached from the last open, so this normally changes nothing.
+  const fontSize = Timing.time("setup: UI font size", applyUIFontSize());
+  const [, accounts, , pending] = await Timing.time("init: parallel setup", Promise.all([
     Timing.time("setup: mru + debug settings", loadMru()),
     Timing.time("setup: accounts.list(true)", messenger.accounts.list(true)),
     Timing.time("setup: captureContext", captureContext()),
-    Timing.time("setup: UI font size", applyUIFontSize()), // before first render, so the popup doesn't jump
     Timing.time("setup: takePendingCommand", takePendingCommand())
   ]));
   folderEntries = Timing.timeSync("collectFolders", () => collectFolders(accounts));
@@ -1076,6 +1120,7 @@ async function init() {
   } else {
     runQueuedEnter();
   }
+  await fontSize;
   await reported;
   await Timing.reportLate("deferred sources (after paint)");
 }

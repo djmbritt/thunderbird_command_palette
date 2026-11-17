@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Command Palette Extras",
+  "description": "Adds the commands that need Thunderbird internals to the Command Palette add-on: Undo/Redo, Get New Mail, Print, View Source, Compact, Expand/Collapse Threads, Today Pane, Calendar/Tasks/Chat, Settings, about: pages and other add-ons' commands. Requires Command Palette.",
+  "version": "1.0.0",
+  "author": "David Britt",
+  "homepage_url": "https://github.com/djmbritt/thunderbird_command_palette",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "64": "icons/icon-64.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "command-palette-extras@djmbritt.github.io",
+      "strict_min_version": "128.0",
+      "strict_max_version": "160.*",
+      "update_url": "https://raw.githubusercontent.com/djmbritt/thunderbird_command_palette/main/companion/updates.json"
+    }
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "experiment_apis": {
+    "palette": {
+      "schema": "experiments/schema.json",
+      "parent": {
+        "scopes": [
+          "addon_parent"
+        ],
+        "paths": [
+          [
+            "palette"
+          ]
+        ],
+        "script": "experiments/implementation.js"
+      }
+    }
+  }
+}

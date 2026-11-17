@@ -30,6 +30,7 @@
     "popup/commands/navigation.js",
     "popup/commands/folders.js",
     "popup/commands/search.js",
+    "popup/commands/addons.js",
     "popup/main.js"
   ]
 }

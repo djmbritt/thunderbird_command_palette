@@ -84,7 +84,7 @@ async function contactPicker() {
 // ---- Spaces ----------------------------------------------------------------
 //
 // spaces.open() only opens spaces the extension created, so built-in spaces
-// go through the experiment (messenger.palette.openSpace).
+// go through the Extras companion (extras.openSpace).
 const SPACES = [
   { name: "calendar", label: "Open Calendar", icon: "📅", keywords: "events agenda schedule" },
   { name: "tasks", label: "Open Tasks", icon: "☑", keywords: "todo to-do" },
@@ -105,12 +105,18 @@ registerCommands(() => [
     icon: "✉",
     keywords: "compose new message email contact address book send to",
     picker: contactPicker
-  }] : []),
-  ...(typeof messenger.palette?.openSpace === "function" ? SPACES.map(sp => ({
+  }] : [])
+]);
+
+registerCommands(async () => {
+  await extrasReady;
+  const openSpace = extras.openSpace;
+  if (typeof openSpace !== "function") return [];
+  return SPACES.map(sp => ({
     id: `open-space-${sp.name}`,
     label: sp.label,
     icon: sp.icon,
     keywords: `space ${sp.name} ${sp.keywords}`,
-    run: () => messenger.palette.openSpace(sp.name)
-  })) : [])
-]);
+    run: () => openSpace(sp.name)
+  }));
+}, { deferred: true }); // needs the Extras companion

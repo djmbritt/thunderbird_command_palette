@@ -16,8 +16,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "command-palette@djmbritt.github.io",
-      "strict_min_version": "128.0",
-      "strict_max_version": "160.*"
+      "strict_min_version": "128.0"
     }
   },
   "background": {
@@ -81,21 +80,5 @@
     "compose.send",
     "compose.save",
     "notifications"
-  ],
-  "experiment_apis": {
-    "palette": {
-      "schema": "experiments/schema.json",
-      "parent": {
-        "scopes": [
-          "addon_parent"
-        ],
-        "paths": [
-          [
-            "palette"
-          ]
-        ],
-        "script": "experiments/implementation.js"
-      }
-    }
-  }
+  ]
 }

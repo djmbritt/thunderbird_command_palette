@@ -17,8 +17,8 @@ curl -fsSL "https://codeload.github.com/$repo/tar.gz/$sha" | tar xz -C "$tmp"
 schemas=$(echo "$tmp"/*/schema-files)
 version=$(grep -h -m1 -o '"applicationVersion": *"[^"]*"' "$schemas/folders.json" | cut -d'"' -f4)
 
-node tools/gen-types.mjs types/messenger.d.ts "$schemas" experiments/schema.json \
+node tools/gen-types.mjs types/messenger.d.ts "$schemas" companion/experiments/schema.json \
   --since types/api-since.json \
   --header "Source: github.com/$repo @ $branch $sha (Thunderbird $version)
-plus experiments/schema.json (messenger.palette).
+plus companion/experiments/schema.json (messenger.palette).
 The add-on supports Thunderbird 128+: check @since on anything newer."

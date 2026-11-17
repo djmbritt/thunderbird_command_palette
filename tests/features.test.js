@@ -402,7 +402,7 @@ function experiment(rec) {
   };
 }
 
-test("Undo dispatches cmd_undo through the experiment", async () => {
+test("Undo dispatches cmd_undo through the Extras companion", async () => {
   const calls = [];
   const rec = (name) => async (...a) => { calls.push([name, ...a]); };
   const p = await loadPalette({ selected: [], palette: experiment(rec) });
@@ -413,7 +413,7 @@ test("Undo dispatches cmd_undo through the experiment", async () => {
   assert.deepEqual(calls, [["runCommand", "cmd_undo"]]);
 });
 
-test("Open Calendar and Toggle Today Pane use the experiment", async () => {
+test("Open Calendar and Toggle Today Pane use the Extras companion", async () => {
   const calls = [];
   const rec = (name) => async (...a) => { calls.push([name, ...a]); };
   let p = await loadPalette({ selected: [], palette: experiment(rec) });
@@ -427,12 +427,54 @@ test("Open Calendar and Toggle Today Pane use the experiment", async () => {
   assert.deepEqual(calls, [["openSpace", "calendar"], ["toggleTodayPane"]]);
 });
 
-test("experiment commands are absent without the experiment", async () => {
+test("companion commands are absent without the Extras companion", async () => {
   const p = await loadPalette({ selected: [] });
   p.type("undo");
   assert.ok(!p.labels().includes("Undo"));
   p.type("calendar");
   assert.ok(!p.labels().includes("Open Calendar"));
+});
+
+test("without the Extras companion, searching for one of its commands offers to get it", async () => {
+  const p = await loadPalette({
+    selected: [],
+    api: (rec) => ({ windows: { openDefaultBrowser: rec("openDefaultBrowser") } })
+  });
+  p.type("undo");
+  assert.equal(p.labels()[0], "Get Command Palette Extras…");
+  p.key("Enter");
+  await settle();
+  assert.equal(only(p.calls, "openDefaultBrowser").length, 1);
+  assert.match(only(p.calls, "openDefaultBrowser")[0][1], /^https:\/\/github\.com\//);
+  assert.ok(!(p.store.mru || []).includes("get-extras"), "not recorded in MRU");
+});
+
+test("with the Extras companion, the get-it entry is not listed", async () => {
+  const p = await loadPalette({ selected: [], palette: experiment(() => async () => {}) });
+  p.type("command palette extras");
+  assert.ok(!p.labels().includes("Get Command Palette Extras…"));
+});
+
+test("an error from the Extras companion reaches the popup's error handling", async () => {
+  const p = await loadPalette({
+    selected: [],
+    palette: { ...experiment(() => async () => {}), runCommand: async () => { throw new Error("cmd_undo is not available right now"); } }
+  });
+  p.type("undo");
+  p.key("Enter");
+  await settle();
+  assert.ok(p.state.closed, "the popup closes after a failed command too");
+});
+
+test("popup code never calls the experiment directly (only via the Extras companion)", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const dir = path.join(__dirname, "..", "popup");
+  const files = [...fs.readdirSync(dir), ...fs.readdirSync(path.join(dir, "commands")).map(f => `commands/${f}`)]
+    .filter(f => f.endsWith(".js"));
+  for (const f of files) {
+    assert.doesNotMatch(fs.readFileSync(path.join(dir, f), "utf8"), /messenger\.palette\b/, f);
+  }
 });
 
 test("message-only internal commands need a selection", async () => {

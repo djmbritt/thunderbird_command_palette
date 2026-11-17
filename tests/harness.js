@@ -9,7 +9,9 @@
 //   initialStore  storage.local contents at start (e.g. { mru: [...] })
 //   initialLocalStorage  window.localStorage contents at start (e.g. { uiFontSize: "18" })
 //   pending    action returned to the popup's "palette:takePending" request
-//   selected, palette, unified, junkFolders, mailTab, mailTabsUpdate,
+//   palette    functions of the Extras companion (its experiment), or
+//              undefined when it isn't installed
+//   selected, unified, junkFolders, mailTab, mailTabsUpdate,
 //   extraFolders — see defaults below.
 
 const fs = require("node:fs");
@@ -17,6 +19,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
+const EXTRAS_ID = "command-palette-extras@djmbritt.github.io";
 // Load the popup's scripts exactly as palette.html does, in its <script> order,
 // so new command files are picked up without touching the tests.
 const HTML = fs.readFileSync(path.join(ROOT, "popup/palette.html"), "utf8");
@@ -135,11 +138,20 @@ async function loadPalette({ initialLocalStorage = {}, initialStore = {}, api = 
       delete: record("delete"),
       archive: record("archive")
     },
-    palette // experiment API; undefined = experiment not loaded
   };
-  if (pending) {
-    messenger.runtime = { sendMessage: async (msg) => (msg.type === "palette:takePending" ? pending : null) };
-  }
+  // runtime.sendMessage(message) goes to our background (pending shortcut
+  // actions); sendMessage(EXTRAS_ID, message) to the Extras companion, whose
+  // experiment functions are `palette` (undefined = companion not installed).
+  messenger.runtime = {
+    sendMessage: async (...args) => {
+      if (args.length === 1) return args[0].type === "palette:takePending" ? pending || null : null;
+      const [id, msg] = args;
+      if (id !== EXTRAS_ID || !palette) throw new Error("Could not establish connection. Receiving end does not exist.");
+      if (msg.type === "extras:hello") return { version: "test", functions: Object.keys(palette) };
+      if (msg.type === "extras:call") return palette[msg.name](...msg.args);
+      return undefined;
+    }
+  };
   // Per-test API additions/overrides, merged per namespace. Use rec("name")
   // for a stub that records its calls into `calls`.
   for (const [ns, fns] of Object.entries(typeof api === "function" ? api(record) : api)) {

@@ -1,6 +1,6 @@
 # Privacy Policy — Command Palette for Thunderbird
 
-Last updated: 2026-11-07
+Last updated: 2026-11-17
 
 **Command Palette does not collect, transmit or share any data.** It has no network access of its own, sends nothing to the developer or to anyone else, and contains no analytics or tracking.
 
@@ -16,8 +16,7 @@ The add-on reads your Thunderbird data only to carry out the command you choose,
 - **Compose windows**: to read and change the sending identity, priority and receipt options of the message you're writing, and to send it later or save it.
 - **Tags**: to list your tags for *Tag with…* and *Go to Tag*.
 - **Notifications**: to confirm actions whose result isn't visible, such as moving messages.
-- **`about:` pages**: to list Thunderbird's built-in `about:` pages (such as `about:config`) so you can open them.
-- **Other add-ons**: to list the names and keyboard-shortcut commands of your other installed add-ons (and their toolbar buttons), so you can run them from the palette. The add-on only runs one when you choose it.
+- **Command Palette Extras**: if the optional companion add-on is installed, the palette asks it for its commands and runs them through it (see *Privileged access*). If it isn't, *Get Command Palette Extras…* opens the companion's web page in your browser, only when you choose it.
 
 All of this happens inside Thunderbird on your computer.
 
@@ -26,14 +25,14 @@ All of this happens inside Thunderbird on your computer.
 The add-on stores a small amount of data locally, in Thunderbird's extension storage on your computer:
 
 - the identifiers of the commands you used most recently (up to 50), so they can be listed first; for *Move to* and *Copy to* this includes the destination folder's identifier, and for another add-on's command that add-on's identifier;
-- the Thunderbird font size from the last time the palette opened, so it opens at the right size;
+- the Thunderbird font size from the last time the palette opened (only with Command Palette Extras), so it opens at the right size;
 - only if you turn on *Debug: Startup Timing*: timing measurements of the palette opening (the last 10), which you can copy to the clipboard yourself. *Debug: Turn Off Startup Timing* deletes them.
 
 This data never leaves your computer. Removing the add-on removes it.
 
-## Privileged access
+## Privileged access (Command Palette Extras)
 
-Some commands (Get New Mail, Undo/Redo, Print, View Source, Compact Folders, Expand/Collapse Threads, the Today pane, opening Calendar/Tasks/Chat, Settings, Account Settings, Add-ons and Themes, `about:` pages, and other add-ons' commands) use a small built-in "experiment" API, because Thunderbird doesn't offer these to add-ons otherwise. Because of it, Thunderbird asks you to grant the add-on full access. The experiment code only performs that fixed list of actions. The only things it reads are Thunderbird's font-size setting, the list of available `about:` pages, and your other add-ons' names and commands; it changes no settings and sends nothing anywhere. It is in `experiments/implementation.js` in the [source code](https://github.com/djmbritt/thunderbird_command_palette).
+Command Palette itself has no privileged access. Some commands (Get New Mail, Undo/Redo, Print, View Source, Compact Folders, Expand/Collapse Threads, the Today pane, opening Calendar/Tasks/Chat, Settings, Account Settings, Add-ons and Themes, `about:` pages, and other add-ons' commands) come from the separate, optional **Command Palette Extras** add-on, which uses a small "experiment" API because Thunderbird doesn't offer these to add-ons otherwise. Because of it, Thunderbird asks you to grant that add-on full access. It only performs that fixed list of actions, and only when Command Palette asks; it ignores every other add-on. The only things it reads are Thunderbird's font-size setting, the list of available `about:` pages, and your other add-ons' names and commands (to list them in the palette). It stores nothing, changes no settings and sends nothing anywhere. Its code is in `companion/` in the [source code](https://github.com/djmbritt/thunderbird_command_palette).
 
 ## Contact
 

@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "command-palette-extras@djmbritt.github.io": {
+      "updates": [
+        {
+          "version": "1.0.0",
+          "update_link": "https://github.com/djmbritt/thunderbird_command_palette/releases/download/extras-v1.0.0/command-palette-extras-1.0.0.xpi",
+          "applications": {
+            "gecko": {
+              "strict_min_version": "128.0",
+              "strict_max_version": "160.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

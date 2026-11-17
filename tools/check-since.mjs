@@ -65,7 +65,7 @@ function resolve(path) {
 const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const problems = [];
-const files = ["background.js", "popup", "lib"].flatMap(p => jsFiles(join(root, p)));
+const files = ["background.js", "companion/background.js", "popup", "lib"].flatMap(p => jsFiles(join(root, p)));
 for (const file of files) {
   const raw = readFileSync(file, "utf8");
   const rawLines = raw.split("\n");

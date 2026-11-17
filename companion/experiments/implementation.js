@@ -1,8 +1,10 @@
 // WebExtension Experiment API for Thunderbird command-palette actions
 // that aren't exposed through the public MailExtension WebExtension surface.
 //
-// Loaded via manifest.json -> experiment_apis.palette. Runs in the privileged
-// addon_parent process and exposes messenger.palette.* to the extension.
+// Part of the Command Palette Extras companion add-on: loaded via
+// companion/manifest.json -> experiment_apis.palette. Runs in the privileged
+// addon_parent process and exposes messenger.palette.* to the companion's
+// background.js, which relays calls from the palette (see there).
 //
 // References:
 //   tbkeys: https://github.com/wshanks/tbkeys (canonical pattern for

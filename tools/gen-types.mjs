@@ -10,7 +10,7 @@
 //
 // Inputs are Thunderbird's annotated MV3 schemas
 // (github.com/thunderbird/webext-annotated-schemas, branch esr-mv3) and our own
-// experiments/schema.json; both use the same format. Run `npm run types:update`
+// companion/experiments/schema.json; both use the same format. Run `npm run types:update`
 // rather than calling this directly.
 //
 // The mapping is deliberately loose where the schema is (unknown/unsupported
