@@ -56,6 +56,8 @@ How to test: press Ctrl+Shift+P (or click the toolbar button), type to filter, E
 
 This version has no Experiment API (the previous submission was rejected for one). The commands that needed it were moved to a separate, self-hosted companion add-on, Command Palette Extras (companion/ in the repository, not part of this .xpi, not submitted to ATN). Command Palette feature-detects it with runtime.sendMessage("command-palette-extras@djmbritt.github.io", …) and works fully without it; when it's missing, searching for one of its commands lists "Get Command Palette Extras…", which opens the homepage with windows.openDefaultBrowser. Nothing in this .xpi runs privileged code.
 
+webext-linter 2.7.2 reports 0 errors/warnings. Its two code-review items: the "tabs" permission is used for tab titles in "Switch to Tab…" (popup/commands/navigation.js, tabs.query + t.title); commands.openShortcutSettings (TB 137+) is only offered behind `typeof messenger.commands?.openShortcutSettings === "function"` (popup/commands/thunderbird.js:170). The 11 ATN validator warnings are its Firefox schema not knowing Thunderbird permissions (accountsRead, messagesRead, compose.send, …).
+
 For reference, the companion's experiment functions and why each one is needed:
 - getNewMail: trigger Get New Messages.
 - openSettings / openAccountSettings / openAddonsManager: open Thunderbird's Settings, Account Settings and Add-ons and Themes.
